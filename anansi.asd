@@ -1,0 +1,20 @@
+(asdf:defsystem "anansi"
+  :description "Rate-limited function calls with special support for mitigating potential denial of service on web login forms."
+  :version "0.1.0"
+  :author "Jach <github@thejach.com>"
+  :license "Unlicense / Public Domain"
+  :depends-on ("bordeaux-threads"
+               "log4cl")
+  :serial t
+  :pathname "src"
+  :components ((:file "packages")
+               (:file "main"))
+  :in-order-to ((asdf:test-op (asdf:test-op "anansi/test"))))
+
+(asdf:defsystem "anansi/test"
+  :depends-on ("anansi"
+               "fiveam")
+  :serial t
+  :pathname "test"
+  :components ((:file "limiter-tests"))
+  :perform (asdf:test-op (o c) (uiop:symbol-call ':5am '#:run-all-tests ':summary ':suite)))
