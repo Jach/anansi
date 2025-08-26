@@ -68,6 +68,15 @@
   underlying-result
   final-status)
 
+(defun make-success-and-wait (result target-time)
+  (sleep-until target-time)
+  (make-compute-result :underlying-finished? t :underlying-result result :final-status :succeeded))
+
+(defun make-failure-and-wait (reason target-time)
+  (sleep-until target-time)
+  (make-compute-result :underlying-finished? nil :underlying-result nil :final-status reason))
+
+
 (defmacro with-computation ((limiter) &body body)
   "Uses BODY as the computation to potentially execute within the context of the limiter's compute call."
   `(compute ,limiter (lambda () ,@body)))
@@ -76,41 +85,54 @@
   "Runs the limiter's computation in constant-runtime + jitter time no matter what.
    Returns a compute-result struct."
   (let* ((time-now (now-seconds))
-         (target-duration (+ time-now (.constant-runtime limiter) (* (random 1.0) (.jitter limiter))))
-         (wait-access-sema (.wait-access-sema limiter)))
-    (if (and wait-access-sema ; sema is ready
-             (not (bt:wait-on-semaphore wait-access-sema :timeout least-positive-double-float)))
-        (progn ; Hard back-pressure, skip any attempt at computing or waiting to compute
-          (sleep-until target-duration)
-          (make-compute-result :underlying-finished? nil :underlying-result nil :final-status :wait-limit-full))
+         (target-time (+ time-now (.constant-runtime limiter) (* (random 1.0) (.jitter limiter)))))
+    (if (wait-limit-full? limiter)
+        (make-failure-and-wait :wait-limit-full target-time)) ; Hard back-pressure, skip any attempt at computing or waiting to compute
 
-        (if (bt:wait-on-semaphore (.compute-sema limiter) :timeout (.max-wait limiter))
-            (let ((result nil)) ; proceed and do computation
-              (when wait-access-sema
-                (bt:signal-semaphore wait-access-sema)) ; allow others to join the waiting
+        (if (acquire-compute-semaphore? limiter)
+            (let ((compute-result nil) ; proceed and do computation
+                  (final-result nil))
+              (allow-new-wait-access limiter)
               (unwind-protect
-                (setf result
-                      (funcall (if override-computation
-                                   override-computation
-                                   (.computation limiter))))
+                (setf compute-result (funcall (if override-computation
+                                                  override-computation
+                                                  (.computation limiter))))
 
-                (let ((wait-and-computation-time (- (now-seconds) time-now)))
-                  (bt:signal-semaphore (.compute-sema limiter))
-                  (when (not wait-access-sema) ; first run
-                    (prepare-wait-semaphore limiter wait-and-computation-time))
-                  (sleep-until target-duration)))
-              (make-compute-result :underlying-finished? t :underlying-result result :final-status :succeeded))
+                (release-compute-semaphore limiter)
+                (prepare-wait-semaphore-on-first-compute limiter (- (now-seconds) time-now))
+                (setf final-result (make-success-and-wait compute-result target-time)))
+              final-result)
 
-            (progn
-              (sleep-until target-duration)
-              (make-compute-result :underlying-finished? nil :underlying-result nil :final-status :exceeded-max-wait))))))
+            (make-failure-and-wait :exceeded-max-wait target-time))))
 
-(defun prepare-wait-semaphore (limiter wait-and-computation-time)
-  (let ((q-max (max 1 (1- (floor
-                            (* (.concurrency limiter)
-                               (/ (.max-wait limiter) (if (zerop wait-and-computation-time)
-                                                          (* 0.2 (.constant-runtime limiter))
-                                                          wait-and-computation-time))))))))
-    (setf (.q-max limiter) q-max)
-    (setf (.wait-access-sema limiter) (bt:make-semaphore :count q-max))))
+(defmethod wait-limit-full? ((limiter limiter))
+  "If the wait access semaphore has been prepared, to try acquire it for the least amount of time possible.
+   If it fails, then it is full and this request cannot start waiting."
+  (and (.wait-access-sema limiter)
+       (not (bt:wait-on-semaphore (.wait-access-sema limiter) :timeout least-positive-double-float))))
+
+(defmethod allow-new-wait-access ((limiter limiter))
+  "Allows new requests to at least join for waiting. (Releases the wait access semaphore."
+  (when(.wait-access-sema limiter)
+    (bt:signal-semaphore(.wait-access-sema limiter))))
+
+(defmethod acquire-compute-semaphore? ((limiter limiter))
+  "Tries to acquire the compute semaphore within a max-wait timeout."
+  (bt:wait-on-semaphore (.compute-sema limiter) :timeout (.max-wait limiter)))
+
+(defmethod release-compute-semaphore ((limiter limiter))
+  "Releases the semaphore and allows another concurrent computation to occur."
+  (bt:signal-semaphore (.compute-sema limiter)))
+
+(defmethod prepare-wait-semaphore-on-first-compute ((limiter limiter) wait-and-computation-time)
+  "If the wait semaphore hasn't been setup yet, do so now."
+  (when (not (.wait-access-sema limiter))
+    (let ((q-max (max 1 (1-
+                         (floor
+                           (* (.concurrency limiter)
+                              (/ (.max-wait limiter) (if (zerop wait-and-computation-time)
+                                                         (* 0.2 (.constant-runtime limiter))
+                                                         wait-and-computation-time))))))))
+      (setf (.q-max limiter) q-max)
+      (setf (.wait-access-sema limiter) (bt:make-semaphore :count q-max)))))
 
