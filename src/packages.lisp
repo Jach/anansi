@@ -3,7 +3,9 @@
   (:export #:limiter
            #:make-limiter
 
+           #:.computation
            #:compute
+           #:with-computation
 
            #:compute-result
            #:compute-result-underlying-finished?
