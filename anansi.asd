@@ -18,3 +18,22 @@
   :pathname "test"
   :components ((:file "limiter-tests"))
   :perform (asdf:test-op (o c) (uiop:symbol-call ':5am '#:run-all-tests ':summary ':suite)))
+
+(asdf:defsystem "anansi/example"
+  :description "A small-ish example providing a login + registration form and showcasing
+                use of bcrypt wrapped in the anansi limiter in the authentication file."
+  :depends-on ("anansi"
+               "cl-bcrypt"
+
+               "hunchentoot"
+               "easy-routes"
+               "spinneret"
+
+               "cl-dbi"
+               "dbd-sqlite3")
+  :serial t
+  :pathname "example"
+  :components ((:file "config")
+               (:file "authentication")
+               (:file "web")
+               (:file "main")))
