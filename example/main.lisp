@@ -33,3 +33,7 @@
                             (t (exit-with-backtrace c))))))
     (start (config:config :server-port))
     (loop do (sleep most-positive-fixnum))))
+
+;; If running from a repl, I suggest:
+#+nil
+(bt:make-thread #'main)

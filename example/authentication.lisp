@@ -1,5 +1,7 @@
 (defpackage #:com.thejach.anansi/example.authentication
-  (:use #:cl))
+  (:use #:cl)
+  (:export #:generate-hash
+           #:check-password-against-hash))
 
 (in-package #:com.thejach.anansi/example.authentication)
 
@@ -33,5 +35,7 @@
   (bcrypt:encode (bcrypt:make-password password :cost 12)))
 
 (defun check-password-against-hash (password hash)
-  (bcrypt:password= password hash))
+  (handler-case
+    (bcrypt:password= password hash)
+    (error () nil)))
 

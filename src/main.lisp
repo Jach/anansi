@@ -53,7 +53,7 @@
 (defmethod initialize-instance :after ((limiter limiter) &key)
   (setf (.compute-sema limiter) (bt:make-semaphore :count (.concurrency limiter))))
 
-(defun make-limiter (&key (computation (lambda ())) constant-runtime jitter concurrency max-wait)
+(defun make-limiter (&key (computation (lambda ())) (constant-runtime 1.0) (jitter 0.1) (concurrency 4) (max-wait 0.6))
   (make-instance 'limiter
                  :computation computation
                  :constant-runtime constant-runtime
