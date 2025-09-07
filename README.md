@@ -10,6 +10,8 @@
      /    |    \
 ```
 
+Current status: WIP
+
 This library provides a way to rate-limit function calls with a special configurable login verification component for use in a web application. The main purpose
 of the login component is to augment the standard verification flow of "Take password -> hash -> compare with stored DB hash" with some protections against
 server abuse, specifically denial of service (DoS).

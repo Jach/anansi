@@ -29,11 +29,13 @@
                "easy-routes"
                "spinneret"
 
+               "str"
                "cl-dbi"
                "dbd-sqlite3")
   :serial t
   :pathname "example"
   :components ((:file "config")
+               (:file "db")
                (:file "authentication")
                (:file "web")
                (:file "main")))

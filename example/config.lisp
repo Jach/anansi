@@ -3,7 +3,8 @@
   (:export #:app-root
            #:static-dir
            #:config
-           #:acceptor))
+           #:acceptor
+           #:db-name))
 
 (in-package #:com.thejach.anansi/example.config)
 
@@ -20,3 +21,7 @@
 
 (defclass acceptor (easy-routes:routes-acceptor)
   ())
+
+(defun db-name ()
+  (merge-pathnames #P"db.sqlite3" (app-root)))
+
