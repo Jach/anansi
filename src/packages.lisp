@@ -1,5 +1,6 @@
 (defpackage #:com.thejach.anansi
   (:use #:cl)
+  (:local-nicknames (#:cht #:org.shirakumo.luckless.hashtable))
   (:export #:limiter
            #:make-limiter
 
@@ -7,9 +8,11 @@
            #:compute
            #:with-computation
 
-           #:compute-result
            #:compute-result-underlying-finished?
            #:compute-result-underlying-result
-           #:compute-result-final-status))
+           #:compute-result-final-status
+
+           #:login-rate-limiter
+           #:verify-login))
 
 

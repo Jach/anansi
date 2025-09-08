@@ -2,7 +2,8 @@
   (:use #:cl #:easy-routes)
   (:local-nicknames (#:config #:com.thejach.anansi/example.config)
                     (#:db #:com.thejach.anansi/example.db)
-                    (#:auth #:com.thejach.anansi/example.authentication))
+                    (#:auth #:com.thejach.anansi/example.authentication)
+                    (#:anansi #:com.thejach.anansi))
   (:export #:start
            #:stop)
   (:import-from #:spinneret
@@ -41,11 +42,10 @@
   "Return a random CSRF token."
   (ironclad:byte-array-to-hex-string (ironclad:random-data 16)))
 
-(hunchentoot::session-data (cdr (assoc 5 (hunchentoot:session-db *server*))))
 (defun csrf-valid? (prefix)
   (let ((submitted (hunchentoot:post-parameter "csrf-token"))
         (session (hunchentoot:session-value (intern (uiop:strcat prefix "-CSRF-TOKEN") :keyword))))
-    (format t "~a~%" (list submitted session))
+    ;(format t "~a~%" (list submitted session))
     (and submitted session (equal submitted session))))
 
 (defun login-form (&optional error-msg (username ""))
@@ -166,25 +166,25 @@
 (defroute login ("/login" :method :post :acceptor-name anansi-web :decorators (@csp @html (@csrf "LOGIN"))) (&post username password)
   (when (find-if #'str:empty? (list username password))
     (return-from login (with-html-string (login-form "Error: Please provide a username and password."))))
+
   (handler-case
     (let* ((user-data (db:with-connection (conn) (db:select-id-password-hash conn username)))
            (pw-hash (gethash "password_hash" user-data "")))
       (when (str:empty? pw-hash)
         (return-from login (with-html-string (login-form "Error: No username found. We shouldn't mention that though because it is better to NOT let an attacker know whether an attempt is on a valid account."))))
 
-      (let* ((limiter (com.thejach.anansi:make-limiter
-                        :computation (lambda ()
-                                       (auth:check-password-against-hash password pw-hash))))
-             (result (com.thejach.anansi:compute limiter)))
-        (when (not (com.thejach.anansi:compute-result-underlying-finished? result))
+      (let ((result (auth:verify-login (gethash "id" user-data) password pw-hash (hunchentoot:real-remote-addr))))
+        (when (not (anansi:compute-result-underlying-finished? result))
           (return-from login (with-html-string (login-form (format nil "Error: Could not perform hash computation for (best omitted) reason ~a."
-                                                                   (com.thejach.anansi:compute-result-final-status result))
+                                                                   (anansi:compute-result-final-status result))
                                                            username))))
-        (when (not (com.thejach.anansi:compute-result-underlying-result result))
+
+        (when (not (anansi:compute-result-underlying-result result))
           ;; Note: convince yourself that it's safe to send username back in the form here and previously without sanitizing / html escaping it.
           ;; (If you try adding raw html tags to the error string, they'll be escaped. If you try adding tags to the username,
           ;; they seem not to be, but if you try to escape the value field with a double quote, the double quote is escaped.)
           (return-from login (with-html-string (login-form "Error: Password did not match (probably shouldn't tell you that)." username))))
+
         ;; Success
         (grant-session username)
         (redir "/welcome")))
@@ -194,36 +194,33 @@
 
 
 (defroute register ("/register" :method :post :acceptor-name anansi-web :decorators (@csp @html (@csrf "REGISTER"))) (&post username password password2)
-  (cond
-    ((find-if #'str:empty? (list username password password2))
-     (with-html-string (register-form "Error: Please provide all 3 inputs.")))
-    ((not (equal password password2))
-     (with-html-string (register-form "Error: The 2 given passwords do not match." username)))
-    (t
-     (let* ((user-data (db:with-connection (conn) (db:select-id-password-hash conn username)))
-            (already-exists? (gethash "id" user-data)))
-       (cond (already-exists?
-               (with-html-string (register-form "Error: That username is taken (and we shouldn't necessarily disclose that).")))
-             (t
-              (let* ((limiter (com.thejach.anansi:make-limiter
-                                :computation (lambda () (auth:generate-hash password))))
-                     (result (com.thejach.anansi:compute limiter)))
-                (if (not (com.thejach.anansi:compute-result-underlying-finished? result))
-                    (with-html-string
-                      (register-form (format nil
-                                             "Error: Could not perform hash computation for reason ~a (we probably shouldn't disclose that)."
-                                             (com.thejach.anansi:compute-result-final-status result))
-                                     username))
-                    (let ((hashed-pw (com.thejach.anansi:compute-result-underlying-result result)))
-                      (handler-case
-                        (db:with-connection (conn)
-                          (db:insert-user conn username hashed-pw))
-                        (error (err) (with-html-string
-                                       (register-form (format nil "Error: Could not register user (why? We should probably not disclose: ~a)." err)
-                                                      username))))
-                      (grant-session username)
-                      (redir "/welcome"))))))))))
+  (when (find-if #'str:empty? (list username password password2))
+    (return-from register (with-html-string (register-form "Error: Please provide all 3 inputs."))))
 
+  (when (not (equal password password2))
+    (return-from register (with-html-string (register-form "Error: The 2 given passwords do not match." username))))
+
+  (handler-case
+    (let* ((user-data (db:with-connection (conn) (db:select-id-password-hash conn username)))
+           (already-exists? (gethash "id" user-data)))
+      (when already-exists?
+        (return-from register (with-html-string (register-form "Error: That username is taken (and we shouldn't necessarily disclose that)."))))
+
+      (let ((result (auth:generate-hash password (hunchentoot:real-remote-addr))))
+        (if (not (anansi:compute-result-underlying-finished? result))
+            (with-html-string
+              (register-form (format nil "Error: Could not perform hash computation for reason ~a (we probably shouldn't disclose that)."
+                                     (anansi:compute-result-final-status result))
+                             username))
+
+            (let ((hashed-pw (anansi:compute-result-underlying-result result)))
+              (db:with-connection (conn)
+                (db:insert-user conn username hashed-pw))
+              (grant-session username)
+              (redir "/welcome")))))
+
+    (error (err) (with-html-string (register-form (format nil "Error: Could not register user, probably from the DB. We should probably not disclose but: ~a." err)
+                                                  username)))))
 
 
 ;;; Static routes (nit: hunchentoot's normal create-folder-dispatcher-and-handler trick wasn't working and I couldn't figure out why, such behavior

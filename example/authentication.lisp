@@ -1,41 +1,20 @@
 (defpackage #:com.thejach.anansi/example.authentication
   (:use #:cl)
-  (:export #:generate-hash
-           #:check-password-against-hash))
+  (:local-nicknames (#:anansi #:com.thejach.anansi))
+  (:export #:verify-login
+           #:generate-hash))
 
 (in-package #:com.thejach.anansi/example.authentication)
 
-(defparameter *limiter* (com.thejach.anansi:make-limiter :constant-runtime 1.0
-                                                         :jitter 0
-                                                         :concurrency 4
-                                                         :max-wait 0.58))
-
-;(log:config :sane2)
-;(loop for i below 15
-;      collect
-;  (bt:make-thread (lambda ()
-;                    (log:info
-;                    (com.thejach.anansi:with-computation (*limiter*)
-;                      (generate-hash "hello"))))
-;                  )
-;;  )
-;*
-
-;(bt:make-thread (lambda ()
-;                  (dotimes (_ 24)
-;                    (bt:make-thread (lambda (&aux res now)
-;                                      (setf now (com.thejach.anansi::now-seconds))
-;                                      (setf res (com.thejach.anansi:compute-result-final-status
-;                                        (com.thejach.anansi:with-computation (*limiter*)
-;                                          (generate-hash "hello"))))
-;                                      (format t "~f ~a~%" (- (com.thejach.anansi::now-seconds) now) res)
-;)))))
-
-(defun generate-hash (password)
-  (bcrypt:encode (bcrypt:make-password password :cost 12)))
+(defparameter *limiter* (make-instance 'anansi:login-rate-limiter))
 
 (defun check-password-against-hash (password hash)
   (handler-case
     (bcrypt:password= password hash)
     (error () nil)))
 
+(defun verify-login (user-id user-password user-hashed-password ip)
+  (anansi:verify-login *limiter* user-id ip (lambda () (check-password-against-hash user-password user-hashed-password))))
+
+(defun generate-hash (password ip)
+  (anansi:verify-login *limiter* nil ip (lambda () (bcrypt:encode (bcrypt:make-password password :cost 12)))))

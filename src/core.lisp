@@ -1,7 +1,7 @@
 (in-package #:com.thejach.anansi)
 
 (defun now-seconds ()
-  (/ (get-internal-real-time) internal-time-units-per-second))
+  (float (/ (get-internal-real-time) internal-time-units-per-second)))
 
 (defun sleep-until (target-time-seconds)
   "Given a target-time-seconds that represents a time in the future,
@@ -81,12 +81,15 @@
   "Uses BODY as the computation to potentially execute within the context of the limiter's compute call."
   `(compute ,limiter (lambda () ,@body)))
 
-(defmethod compute ((limiter limiter) &optional override-computation)
+(defmethod compute ((limiter limiter) &optional override-computation immediately-wait?)
   "Runs the limiter's computation in constant-runtime + jitter time no matter what.
-   Returns a compute-result struct."
+   Returns a compute-result struct.
+   An optional override-computation function can be given, it will be called instead of the stored computation function at object creation.
+   An optional immediately-wait? boolean can be given. If true, it's as if the wait limit is already full, and so the call will just sleep
+   for the set runtime and return a failure."
   (let* ((time-now (now-seconds))
          (target-time (+ time-now (.constant-runtime limiter) (* (random 1.0) (.jitter limiter)))))
-    (if (wait-limit-full? limiter)
+    (if (or immediately-wait? (wait-limit-full? limiter))
         (make-failure-and-wait :wait-limit-full target-time)) ; Hard back-pressure, skip any attempt at computing or waiting to compute
 
         (if (acquire-compute-semaphore? limiter)

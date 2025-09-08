@@ -4,12 +4,14 @@
   :author "Jach <github@thejach.com>"
   :license "Unlicense / Public Domain"
   :depends-on ("bordeaux-threads"
+               "luckless"
+               "trivial-garbage"
                "log4cl")
   :serial t
   :pathname "src"
   :components ((:file "packages")
                (:file "core")
-               (:file "login"))
+               (:file "login-rate-limiter"))
   :in-order-to ((asdf:test-op (asdf:test-op "anansi/test"))))
 
 (asdf:defsystem "anansi/test"
