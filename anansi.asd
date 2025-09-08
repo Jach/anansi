@@ -8,7 +8,8 @@
   :serial t
   :pathname "src"
   :components ((:file "packages")
-               (:file "main"))
+               (:file "core")
+               (:file "login"))
   :in-order-to ((asdf:test-op (asdf:test-op "anansi/test"))))
 
 (asdf:defsystem "anansi/test"
