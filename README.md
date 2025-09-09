@@ -22,36 +22,68 @@ do if a faster hash like sha256 was used.
 
 # API
 
-The anansi project creates the following systems:
+The anansi project contains the following systems:
 
 * anansi
 * anansi/test
+* anansi/example
 
-The `anansi` system creates the following packages and key exported symbols:
+The `anansi` system creates the following packages and exported symbols:
 
 * `com.thejach.anansi`
-    * `limiter` -- the limiter class
-    * `make-limiter` -- wrapper constructor around `make-instance`
-        * Expects keys :computation (your zero-argument function), :constant-runtime (fixed time of execution), :jitter (random max of extra jitter time),
-          :concurrency (how many computations can run at once), and :max-wait (how long a computation can wait before starting to run)
-    * `compute` -- key method to call which may or may not invoke the underlying computation function, but will execute in fixed constant-runtime+jitter regardless
+    * `limiter` -- the general limiter class
+    * `make-limiter` -- optional wrapper constructor around `make-instance`
+        * Allows for 5 keyword options: `:computation` (your zero-argument function), `:constant-runtime` (fixed time of execution), `:jitter` (random max of extra jitter time),
+          `:concurrency` (how many computations can run at once), and `:max-wait` (how long a computation can wait before starting to run)
+    * `compute` -- core method to call which may or may not invoke the underlying computation function, but will execute in fixed constant-runtime+jitter regardless
+        * Takes two optional parameters: `override-computation` is a function that will be called instead of the underlying computation (if given) stored at
+          object creation time; `immediately-wait?` will result in the call sleeping for the expected constant-runtime+jitter duration without doing anything
+          else.
     * `compute-result` -- result struct returned by `compute`, with the following 3 accessors:
-        * `compute-result-underlying-finished?`
-        * `compute-result-underlying-result`
-        * `compute-result-final-status`
+        * `compute-result-underlying-finished?` -- true only if the underlying function was successfully called
+        * `compute-result-underlying-result` -- if the underlying function was called, this is the value that was returned
+        * `compute-result-final-status` -- a keyword, will be `:succeeded` if `underlying-finished?` is true, otherwise will be some other keyword indicating a failure reason.
+    * `login-rate-limiter` -- a further specialized version of the general limiter class with options for banning IPs or locking out user ids if compute (login)
+      attempts are too frequent.
+    * `make-login-rate-limiter` -- optional wrapper constructor around `make-instance`
+        * Besides the keys to `make-limiter`, allows for 5 other options: `:max-attempts-per-minute` (rate that if exceeded results in an IP ban),
+          `:ban-duration-minutes` (how long an IP ban lasts), `:max-user-failures-per-minute` (rate of attempts by any IP against a particular user id before
+          that user id is locked out), `:lock-user-duration-minutes` (how long a user id can be locked out), `:cleanup-interval-minutes` (how often a background
+          maintenance thread runs to manage unbanning/unlocking tasks and keep the records from growing without bound)
+    * `verify-login` -- core method to call, takes additional required arguments `user-key` and `ip`. Invokes the underlying `compute` if and only if the given
+      arguments aren't for a banned ip or locked user.
+        * If the given `user-key` and `ip` are both `nil`, then this behaves the same as `compute`. You can leave just one `nil` to only get the other's
+          behavior.
+        * Takes two optional parameters: `override-computation` is again a function that will be used instead of any stored underlying function;
+          `drop-immediately?` when true will result in the function call returning immediately for a banned user or locked account instead of continuing to
+          sleep for the constant-runtime+jitter duration.
 
-# Core Design
+## Example
 
-All calls to `verify-login` must finish in a constant runtime / deadline D plus jitter J, regardless of whether the login is successful or not. An attacker should not be able to
+An example is made in the `anansi/example` system. The two most important files to look at are:
+
+* [`example/authentication.lisp`](example/authentication.lisp) -- here a login-rate-limiter is created as a singleton shared by the login and registration flows. It is used by two functions
+  for the two flows to wrap the expensive bcrypt computation/check within the limiter, with the registration side only checking rate limits for IPs.
+* [`example/web.lisp`](example/web.lisp) -- the two `defroute` forms for `login` and `register` handle the POST requests for their respective forms. Various data validation is done
+  and ultimately the login flow calls `auth:verify-login` with a given user id, IP address, password, and password hash, and shows how to use the
+  returned `compute-result-...` to extract various information beyond a plain pass/fail. Similarly for the registration flow, but it calls `auth:generate-hash`
+  passing the password to hash and the IP address.
+
+You can load the example system and (recommended if in a REPL) evaluate `(bt:make-thread #'com.thejach.anansi/example:main)` to start the example webapp on port
+56142.
+
+# Design Notes
+
+All calls to `compute` or `verify-login` must finish in a constant runtime / deadline D (default 1s) plus jitter J (default random up to 0.1s), regardless of whether the login check or whatever other computatin specified is successful or not. An attacker ideally should not be able to
 distinguish between failure because of incorrect password, failure because a user doesn't exist, failure because the computation was skipped due to dropping
 their requests for abuse or due to server load, or timing information that might be related to the length of either the password or the hashed value.
 
-A semaphore is used to restrict the number of bcrypt (or other hash) computations that can happen at once to some fixed limit K, default of 4. If this limit is
-hit, new requests will wait some amount of time W for the semaphore. The time to complete a hash B plus the max semaphore wait time W should be less than D. The
-thread will sleep at the end to consume any extra time after semaphore waiting/hashing that remains until D total duration is hit.
+A semaphore is used to restrict the number of computations that can happen at once to some fixed limit K (default 4). If this limit is
+hit, new requests will wait some amount of time W (max-wait, default 0.6s) for the semaphore. The time to complete a computation B (estimated by measuring the time of the first run) plus the max semaphore wait time W should be less than D. The
+thread will sleep at the end to consume any extra time after semaphore waiting/hashing that remains until D total duration + jitter time is hit.
 
 A bounded queue in front of the semaphore provides hard back-pressure to ensure that under extra load, requests will immediately fail to a sleep state for the
-deadline duration instead of fighting each other in sleep-wake-sleep loops for the semaphore. This bounded queue is actually implemented as just another
+deadline duration + jitter instead of fighting each other in sleep-wake-sleep loops for the semaphore. This bounded queue is actually implemented as just another
 semaphore but with a timeout of the smallest possible value.
 
 Some numbers for a default configuration:
@@ -70,30 +102,32 @@ To guarantee that any job that gets enqueued will start within W, we set a bound
 
 (The -1 is to ensure that by the time the last slot in the queue is served, it hasn't waited more than W.)
 
-Thus at most 4 are in bcrypt + 9 are waiting, total in system is thus <= 13. If a 14th request arrives while all these slots are occupied, it immediately enters
-a sleep state for the duration ~D instead of contending for the semaphore.
+Thus at most 4 are computing bcrypt + 9 are waiting, total in system is thus <= 13. If a 14th request arrives while all these slots are occupied, it immediately enters
+a sleep state for the duration ~D+J instead of contending for the semaphore.
 
-# Secondary protections of the login component
+## Secondary protections of the login-rate-limiter
 
 Given an IP address, track the request rate from that IP. If it exceeds some amount, then subsequent requests from that IP are temporarily "banned" and
-immediately go into the sleep-until-deadline state, there won't be any hashing even if the system is otherwise free. The duration of the ban starts at 30
-seconds but increases exponentially.
+immediately go into the sleep-until-deadline state, there won't be any hashing even if the system is otherwise free. The duration of the ban is fixed with a
+default of 30 minutes.
 
-Given a user-key, which may represent a username or email address or UUID, track the request rate for that specific user regardless of IP. Again if it exceeds
-some amount, then subsequent requests on that user are temporarily banned and go into the sleep-until-deadline state for a ban duration. The duration of this
-ban also starts at 30 seconds but doubles until it hits a maximum of 24 hours.
+Given a user-key, which may represent a user id or a username or an email address or a UUID, basically some unique identifier for unique users, track the request rate for login attempts on that specific user regardless of IP. Again, if it exceeds
+some amount, then subsequent requests on that user by any IP are temporarily locked and go into the sleep-until-deadline state for the duration of the lock. The duration is fixed with a default of 10 minutes.
 
-Both ban events are logged at the INFO level with log4cl, which may be of value for server-level protections like fail2ban or resolving issues where someone's
-account is being targeted and the abusive cases are preventing their legitimate login.
+It may be more desirable to have shorter bans/locks with exponentially increasing times for repeat offenders. However I would suggest instead setting up a
+higher level rule with a service like fail2ban which reads logs about bans and can apply its own ban logic to block requests before they even hit the Lisp web
+server. As for user locks, you may wish to notify the legimate user via an email that their account is undergoing an attack and that if they need to login again
+they may be unable to while the attack persists.
+
+# Logging
+
+Still todo.
 
 # Metrics
 
+Still todo.
+
 [Prometheus.cl](https://github.com/deadtrickster/prometheus.cl) is used to store various metrics. They can be found and exposed via `*anansi-registry*`.
-
-# Example
-
-A small example site that's just a login form is provided by the `anansi-web-login/example` system. There are also some selenium webdriver tests for this system
-in `anansi-web-login/test`.
 
 # License
 

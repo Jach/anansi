@@ -51,6 +51,20 @@
 (defmethod initialize-instance :after ((self login-rate-limiter) &key)
   (start-maintenance-thread self))
 
+(defun make-login-rate-limiter (&key (max-attempts-per-minute 6) (ban-duration-minutes 30) (max-user-failures-per-minute 6) (lock-user-duration-minutes 10) (cleanup-interval-minutes 15)
+                                     (computation (lambda ())) (constant-runtime 1.0) (jitter 0.1) (concurrency 4) (max-wait 0.6))
+  (make-instance 'login-rate-limiter
+                 :max-attempts-per-minute max-attempts-per-minute
+                 :ban-duration-minutes ban-duration-minutes
+                 :max-user-failures-per-minute max-user-failures-per-minute
+                 :lock-user-duration-minutes lock-user-duration-minutes
+                 :cleanup-interval-minutes cleanup-interval-minutes
+                 :computation computation
+                 :constant-runtime constant-runtime
+                 :jitter jitter
+                 :concurrency concurrency
+                 :max-wait max-wait))
+
 (defmethod verify-login ((self login-rate-limiter) user-key ip &optional override-computation drop-immediately?)
   "Will use the historical frequency of verify-login attempts on a user-key and/or from an IP address,
    as well as the historical success or failure of the underlying computation,

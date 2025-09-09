@@ -6,7 +6,7 @@
 
 (in-package #:com.thejach.anansi/example.authentication)
 
-(defparameter *limiter* (make-instance 'anansi:login-rate-limiter))
+(defparameter *limiter* (anansi:make-login-rate-limiter))
 
 (defun check-password-against-hash (password hash)
   (handler-case
