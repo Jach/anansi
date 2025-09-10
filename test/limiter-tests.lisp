@@ -1,7 +1,8 @@
 (defpackage #:anansi-tests
+  (:import-from #:com.thejach.anansi
+                          #:now-seconds)
   (:use #:cl #:fiveam #:com.thejach.anansi))
 (in-package #:anansi-tests)
-(shadowing-import 'com.thejach.anansi::now-seconds)
 
 ;(setf *run-test-when-defined* t)
 
@@ -37,6 +38,25 @@
     (is (eql :ok (compute-result-underlying-result result)))
     (is (eql :succeeded (compute-result-final-status result)))
     (is (eps-eql? 0.2 elapsed) "Computation did not respect constant-runtime timing, was ~,2fs" elapsed)))
+
+(test limiter-defaults-and-override-success
+  "Test with-computation on a limiter made with default arguments."
+  (let* ((lim (make-limiter))
+         (res (with-computation (lim) (dummy-slow-computation 0.2 t))))
+    (is (eql :fake-bcrypt (compute-result-underlying-result res)))
+    (is (eql :succeeded (compute-result-final-status res)))
+    (is (< (compute-result-entered-at res) (compute-result-exited-at res)))))
+
+(test limiter-immediate-wait
+  "Test no computation happens if immediate-wait is used."
+  (let* ((lim (make-limiter :constant-runtime 0.2 :jitter 0.0))
+         (start (now-seconds))
+         (res (compute lim #'dummy-fast-computation t))
+         (elapsed (- (now-seconds) start)))
+    (is (eql nil (compute-result-underlying-result res)))
+    (is (eql :wait-limit-full (compute-result-final-status res)))
+    (is (eps-eql? 0.2 elapsed))
+    (is (eps-eql? 0.2 (- (compute-result-exited-at res) (compute-result-entered-at res))))))
 
 (test limiter-exceed-max-wait
   "Force a wait longer than max-wait to trigger :exceeded-max-wait."
