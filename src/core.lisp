@@ -62,19 +62,26 @@
                  :max-wait max-wait))
 
 (defstruct compute-result
-  "The result of a compute call so callers can know what happened and decide what to expose. final-status will be :succeeded and is redundant if underlying-finished? is true,
-   but if underlying-finished? is false then final-status will be a more descriptive keyword such as :exceeded-max-wait or :wait-limit-full."
+  "The result of a compute call so callers can know what happened and decide what to expose. final-status will be :succeeded and is redundant if
+   underlying-finished? is true, but if underlying-finished? is false then final-status will be a more descriptive keyword such as :exceeded-max-wait or
+   :wait-limit-full.
+   The final two entered-at and exited-at values are timestamps that may help in debugging or logging representing when the COMPUTE
+   method was called and when it returned."
+
   underlying-finished?
   underlying-result
-  final-status)
+  final-status
 
-(defun make-success-and-wait (result target-time)
-  (sleep-until target-time)
-  (make-compute-result :underlying-finished? t :underlying-result result :final-status :succeeded))
+  entered-at
+  (exited-at (now-seconds)))
 
-(defun make-failure-and-wait (reason target-time)
+(defun make-success-and-wait (result target-time start-time)
   (sleep-until target-time)
-  (make-compute-result :underlying-finished? nil :underlying-result nil :final-status reason))
+  (make-compute-result :underlying-finished? t :underlying-result result :final-status :succeeded :entered-at start-time))
+
+(defun make-failure-and-wait (reason target-time start-time)
+  (sleep-until target-time)
+  (make-compute-result :underlying-finished? nil :underlying-result nil :final-status reason :entered-at start-time))
 
 
 (defmacro with-computation ((limiter) &body body)
@@ -90,9 +97,11 @@
   (let* ((time-now (now-seconds))
          (target-time (+ time-now (.constant-runtime limiter) (* (random 1.0) (.jitter limiter)))))
     (if (or immediately-wait? (wait-limit-full? limiter))
-        (make-failure-and-wait :wait-limit-full target-time)) ; Hard back-pressure, skip any attempt at computing or waiting to compute
+        (make-failure-and-wait :wait-limit-full target-time time-now) ; Hard back-pressure, skip any attempt at computing or waiting to compute
 
-        (if (acquire-compute-semaphore? limiter)
+        (if (not (acquire-compute-semaphore? limiter))
+            (make-failure-and-wait :exceeded-max-wait target-time time-now)
+
             (let ((compute-result nil) ; proceed and do computation
                   (final-result nil))
               (allow-new-wait-access limiter)
@@ -103,10 +112,8 @@
 
                 (release-compute-semaphore limiter)
                 (prepare-wait-semaphore-on-first-compute limiter (- (now-seconds) time-now))
-                (setf final-result (make-success-and-wait compute-result target-time)))
-              final-result)
-
-            (make-failure-and-wait :exceeded-max-wait target-time))))
+                (setf final-result (make-success-and-wait compute-result target-time time-now)))
+              final-result)))))
 
 (defmethod wait-limit-full? ((limiter limiter))
   "If the wait access semaphore has been prepared, to try acquire it for the least amount of time possible.

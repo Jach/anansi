@@ -11,6 +11,8 @@
            #:compute-result-underlying-finished?
            #:compute-result-underlying-result
            #:compute-result-final-status
+           #:compute-result-entered-at
+           #:compute-result-exited-at
 
            #:login-rate-limiter
            #:make-login-rate-limiter
