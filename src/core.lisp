@@ -96,24 +96,27 @@
    for the set runtime and return a failure."
   (let* ((time-now (now-seconds))
          (target-time (+ time-now (.constant-runtime limiter) (* (random 1.0) (.jitter limiter)))))
-    (if (or immediately-wait? (wait-limit-full? limiter))
-        (make-failure-and-wait :wait-limit-full target-time time-now) ; Hard back-pressure, skip any attempt at computing or waiting to compute
+    (when (or immediately-wait? (wait-limit-full? limiter))
+      (return-from compute
+                   (make-failure-and-wait :wait-limit-full target-time time-now))) ; Hard back-pressure, skip any attempt at computing or waiting to compute
 
-        (if (not (acquire-compute-semaphore? limiter))
-            (make-failure-and-wait :exceeded-max-wait target-time time-now)
+    (when (not (acquire-compute-semaphore? limiter))
+      (return-from compute
+                   (make-failure-and-wait :exceeded-max-wait target-time time-now)))
 
-            (let ((compute-result nil) ; proceed and do computation
-                  (final-result nil))
-              (allow-new-wait-access limiter)
-              (unwind-protect
-                (setf compute-result (funcall (if override-computation
-                                                  override-computation
-                                                  (.computation limiter))))
+    (let ((compute-result nil) ; proceed and do computation
+          (final-result nil))
+      (allow-new-wait-access limiter)
+      (unwind-protect
+        (setf compute-result (funcall (if override-computation
+                                          override-computation
+                                          (.computation limiter))))
 
-                (release-compute-semaphore limiter)
-                (prepare-wait-semaphore-on-first-compute limiter (- (now-seconds) time-now))
-                (setf final-result (make-success-and-wait compute-result target-time time-now)))
-              final-result)))))
+        (release-compute-semaphore limiter)
+        (prepare-wait-semaphore-on-first-compute limiter (- (now-seconds) time-now))
+        (setf final-result (make-success-and-wait compute-result target-time time-now)))
+
+      final-result)))
 
 (defmethod wait-limit-full? ((limiter limiter))
   "If the wait access semaphore has been prepared, to try acquire it for the least amount of time possible.
