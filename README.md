@@ -64,7 +64,7 @@ An example is made in the `anansi/example` system. The two most important files 
 
 * [`example/authentication.lisp`](example/authentication.lisp) -- here a login-rate-limiter is created as a singleton shared by the login and registration flows. It is used by two functions
   for the two flows to wrap the expensive bcrypt computation/check within the limiter, with the registration side only checking rate limits for IPs.
-* [`example/web.lisp`](example/web.lisp) -- the two `defroute` forms for `login` and `register` handle the POST requests for their respective forms. Various data validation is done
+* [`example/web.lisp`](example/web.lisp) -- the two `defroute` forms for `login` and `register` naer the bottom of the file handle the POST requests for their respective forms. Various data validation is done
   and ultimately the login flow calls `auth:verify-login` with a given user id, IP address, password, and password hash, and shows how to use the
   returned `compute-result-...` to extract various information beyond a plain pass/fail. Similarly for the registration flow, but it calls `auth:generate-hash`
   passing the password to hash and the IP address.
