@@ -14,13 +14,18 @@
                (:file "login-rate-limiter"))
   :in-order-to ((asdf:test-op (asdf:test-op "anansi/test"))))
 
+
 (asdf:defsystem "anansi/test"
   :depends-on ("anansi"
-               "fiveam")
+               "fiveam"
+               "str")
   :serial t
   :pathname "test"
-  :components ((:file "limiter-tests"))
+  :components ((:file "package")
+               (:file "limiter-tests")
+               (:file "login-tests"))
   :perform (asdf:test-op (o c) (uiop:symbol-call ':5am '#:run-all-tests ':summary ':suite)))
+
 
 (asdf:defsystem "anansi/example"
   :description "A small-ish example providing a login + registration form and showcasing

@@ -1,7 +1,3 @@
-(defpackage #:anansi-tests
-  (:import-from #:com.thejach.anansi
-                          #:now-seconds)
-  (:use #:cl #:fiveam #:com.thejach.anansi))
 (in-package #:anansi-tests)
 
 ;(setf *run-test-when-defined* t)

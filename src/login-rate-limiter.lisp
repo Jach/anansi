@@ -182,11 +182,12 @@
 
 (defun purge (table purge-limit)
   (cht:maphash (lambda (key attempts)
-                 (let ((filtered-attempts (remove-if (lambda (timestamp) (< timestamp purge-limit))
-                                                     attempts)))
-                   (if filtered-attempts
-                       (setf (cht:gethash key table) filtered-attempts)
-                       (cht:remhash key table))))
+                 (when (listp attempts)
+                   (let ((filtered-attempts (remove-if (lambda (timestamp) (< timestamp purge-limit))
+                                                       attempts)))
+                     (if filtered-attempts
+                         (setf (cht:gethash key table) filtered-attempts)
+                         (cht:remhash key table)))))
                table))
 
 (defun cleanup-old-attempts (limiter-ptr)
@@ -199,7 +200,8 @@
 (defun remove-expiry (table)
   (let ((now (now-seconds)))
     (cht:maphash (lambda (key expiry)
-                   (when (< expiry now)
+                   (when (and (numberp expiry) ;; seems expiry can sometimes be a luckless.hashtable::tombstone. so much for this cht...
+                              (< expiry now))
                      (cht:remhash key table)))
                  table)))
 
