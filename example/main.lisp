@@ -1,5 +1,4 @@
 (defpackage #:com.thejach.anansi/example
-  (:local-nicknames (#:config #:com.thejach.anansi/example.config))
   (:export #:main
            #:start
            #:stop)
@@ -7,9 +6,8 @@
 
 (in-package #:com.thejach.anansi/example)
 
-(defun start (port)
-  (format t "Starting http://localhost:~a -- port ~a and app-root ~a~%" port port (config:app-root))
-  (com.thejach.anansi/example.web:start port))
+(defun start ()
+  (com.thejach.anansi/example.web:start))
 
 (defun stop ()
   (format t "~%Stopping~%")
@@ -31,7 +29,7 @@
                             #+sbcl
                             (sb-sys:interactive-interrupt (exit-cleanly))
                             (t (exit-with-backtrace c))))))
-    (start (config:config :server-port))
+    (start)
     (loop do (sleep most-positive-fixnum))))
 
 ;; If running from a repl, I suggest:

@@ -25,7 +25,7 @@
 
 (defmacro with-connection ((conn) &body body)
   "Create and use a DB connection with per-connection pragmas taken care of."
-  `(cl-dbi:with-connection (,conn :sqlite3 :database-name (config:db-name))
+  `(cl-dbi:with-connection (,conn :sqlite3 :database-name (config:config :db-name))
      (execute-script ,conn
                      "PRAGMA foreign_keys=ON;
                       PRAGMA busy_timeout=5000")

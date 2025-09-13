@@ -15,7 +15,10 @@
 
 (defvar *server* nil)
 
-(defun start (port)
+(defun start (&aux port)
+  (config:start)
+  (setf port (config:config :server-port))
+  (format t "Starting http://localhost:~a -- port ~a and app-root ~a~%" port port (config:app-root))
   ;; Hunchentoot uses cl:random, which is pants on head dumb.
   (setf hunchentoot:*session-secret* (ironclad:byte-array-to-hex-string (ironclad:random-data 32)))
   (setf *server* (make-instance 'config:acceptor
@@ -227,8 +230,8 @@
 ;;; has made me decide to make future sites with ningle/jingle backed by not-hunchentoot)
 
 (defroute css ("/style.css" :acceptor-name anansi-web) ()
-  (hunchentoot:handle-static-file (merge-pathnames "style.css" (config:static-dir))))
+  (hunchentoot:handle-static-file (merge-pathnames "style.css" (config:config :static-dir))))
 
 (defroute htmx ("/htmx.min.js" :acceptor-name anansi-web) ()
-  (hunchentoot:handle-static-file (merge-pathnames "htmx.min.js" (config:static-dir))))
+  (hunchentoot:handle-static-file (merge-pathnames "htmx.min.js" (config:config :static-dir))))
 
