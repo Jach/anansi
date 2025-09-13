@@ -56,11 +56,11 @@
       (:h2 "Login")
       (:form :hx-post "/login" :hx-swap "outerHTML" :hx-target "closest div" :hx-indicator ".spinner"
         (:div :class "form-group"
-          (:label :for "username" "Username")
-          (:input :type "text" :id "username" :name "username" :required "true" :value username))
+          (:label :for "login-username" "Username")
+          (:input :type "text" :id "login-username" :name "username" :required "true" :value username))
         (:div :class "form-group"
-          (:label :for "password" "Password")
-          (:input :type "password" :id "password" :name "password" :required "true"))
+          (:label :for "login-password" "Password")
+          (:input :type "password" :id "login-password" :name "password" :required "true"))
         (csrf "LOGIN")
         (:button :type "submit" "Login")
         (:div :class "spinner hidden"))
@@ -73,14 +73,14 @@
       (:h2 "Register")
       (:form :hx-post "/register" :hx-swap "outerHTML" :hx-target "closest div" :hx-indicator ".spinner"
         (:div :class "form-group"
-          (:label :for "username" "Username")
-          (:input :type "text" :id "username" :name "username" :required "true" :value username))
+          (:label :for "register-username" "Username")
+          (:input :type "text" :id "register-username" :name "username" :required "true" :value username))
         (:div :class "form-group"
-          (:label :for "password" "Password")
-          (:input :type "password" :id "password" :name "password" :required "true"))
+          (:label :for "register-password" "Password")
+          (:input :type "password" :id "register-password" :name "password" :required "true"))
         (:div :class "form-group"
-          (:label :for "password2" "Re-enter Password")
-          (:input :type "password" :id "password2" :name "password2" :required "true"))
+          (:label :for "register-password2" "Re-enter Password")
+          (:input :type "password" :id "register-password2" :name "password2" :required "true"))
         (csrf "REGISTER")
         (:button :type "submit" "Register")
         (:div :class "spinner hidden"))
