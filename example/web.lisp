@@ -62,7 +62,7 @@
           (:label :for "login-password" "Password")
           (:input :type "password" :id "login-password" :name "password" :required "true"))
         (csrf "LOGIN")
-        (:button :type "submit" "Login")
+        (:button :id "login-submit" :type "submit" "Login")
         (:div :class "spinner hidden"))
       (when error-msg
         (:div :class "error-msg" error-msg)))))
@@ -82,7 +82,7 @@
           (:label :for "register-password2" "Re-enter Password")
           (:input :type "password" :id "register-password2" :name "password2" :required "true"))
         (csrf "REGISTER")
-        (:button :type "submit" "Register")
+        (:button :id "register-submit" :type "submit" "Register")
         (:div :class "spinner hidden"))
       (when error-msg
         (:div :class "error-msg" error-msg)))))
@@ -139,7 +139,7 @@
             (:meta :name "htmx-config" :content "{ \"includeIndicatorStyles\": false }"))
           (:body
             (:div :class "container"
-             (:h1 "Hello")
+             (:h1 :id "greetings" "Hello")
              (:div :class "forms"
               (login-form)
               (register-form)))
@@ -155,7 +155,7 @@
       (:body
         (:h1 "Welcome to your user page, user id: " (hunchentoot:session-value :user-id))
         (:p "If you would like to log out, "
-         (:a :href "/logout" :hx-boost "true" "click here") ".")))))
+         (:a :id "logout-link" :href "/logout" :hx-boost "true" "click here") ".")))))
 
 (defroute logout ("/logout" :acceptor-name anansi-web :decorators (@csp @html)) ()
   (when (hunchentoot:session-value :user-id)

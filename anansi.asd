@@ -15,18 +15,6 @@
   :in-order-to ((asdf:test-op (asdf:test-op "anansi/test"))))
 
 
-(asdf:defsystem "anansi/test"
-  :depends-on ("anansi"
-               "fiveam"
-               "str")
-  :serial t
-  :pathname "test"
-  :components ((:file "package")
-               (:file "limiter-tests")
-               (:file "login-tests"))
-  :perform (asdf:test-op (o c) (uiop:symbol-call ':5am '#:run-all-tests ':summary ':suite)))
-
-
 (asdf:defsystem "anansi/example"
   :description "A small-ish example providing a login + registration form and showcasing
                 use of bcrypt wrapped in the anansi limiter in the authentication file."
@@ -47,3 +35,23 @@
                (:file "authentication")
                (:file "web")
                (:file "main")))
+
+
+(asdf:defsystem "anansi/test"
+  :depends-on ("anansi"
+               "anansi/example"
+               "fiveam"
+               "cl-webdriver-client"
+               "cl-mock"
+
+               "ironclad"
+               "str")
+  :serial t
+  :pathname "test"
+  :components ((:file "package")
+               (:file "limiter-tests")
+               (:file "login-tests")
+               (:file "page-objects")
+               (:file "webdriver-tests"))
+  :perform (asdf:test-op (o c) (uiop:symbol-call ':5am '#:run-all-tests ':summary ':suite)))
+

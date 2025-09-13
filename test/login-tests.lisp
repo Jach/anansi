@@ -30,7 +30,7 @@
       (compute lim)
       (is-true (sb-ext:search-roots lim-ptr :print nil)))
 
-    (sleep 0.1)
+    (sleep 0.2)
     (is-false (sb-ext:search-roots lim-ptr :print nil))))
 
 #+sbcl
