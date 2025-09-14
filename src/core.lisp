@@ -1,7 +1,14 @@
 (in-package #:com.thejach.anansi)
 
 (defun now-seconds ()
-  (float (/ (get-internal-real-time) internal-time-units-per-second)))
+  (float
+    #+sbcl
+    (multiple-value-bind (s ns) (sb-unix::clock-gettime sb-unix:clock-realtime)
+      (let ((ns-time-unit #.(truncate 1e9)))
+        (/ (+ ns (* ns-time-unit s)) ns-time-unit)))
+    #-sbcl
+    (/ (get-internal-real-time) internal-time-units-per-second)
+    1.0d0))
 
 (defun sleep-until (target-time-seconds)
   "Given a target-time-seconds that represents a time in the future,
