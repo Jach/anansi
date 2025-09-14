@@ -125,9 +125,24 @@ Still todo.
 
 # Metrics
 
-Still todo.
+[Prometheus.cl](https://github.com/deadtrickster/prometheus.cl) is used to store various metrics. The metrics registry for a limiter object can be accessed with
+`.registry`. The metrics themselves are in a `.stored-metrics` hash table. By default, these metrics are defined and tracked for the `limiter` class:
 
-[Prometheus.cl](https://github.com/deadtrickster/prometheus.cl) is used to store various metrics. They can be found and exposed via `*anansi-registry*`.
+* `limiter_compute_duration_seconds`
+* `limiter_compute_successes`
+* `limiter_compute_failures` -- note this has a `final_status` label indicating the failure reason
+
+The `login-rate-limiter` has six additional metrics:
+
+* `login_rate_limiter_verify_successes` -- note this isn't the same as the underlying computation successfully running or not, but whether such computation ran
+  and returned something true
+* `login_rate_limiter_verify_failures`
+* `login_rate_limiter_banned_ips_total`
+* `login_rate_limiter_unbanned_ips_total`
+* `login_rate_limiter_locked_users_total`
+* `login_rate_limiter_unlocked_users_total`
+
+The example web application exposes these on the `/metrics` route.
 
 # License
 

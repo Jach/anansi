@@ -49,7 +49,23 @@
                    attempts to an underlying expensive pw hash computation by IP address and also on a user id/key."))
 
 (defmethod initialize-instance :after ((self login-rate-limiter) &key)
-  (start-maintenance-thread self))
+  (start-maintenance-thread self)
+  (let ((prometheus:*default-registry* (.registry self))
+        (tbl (.stored-metrics self)))
+    (setf (gethash :login-rate-limiter-banned-ips tbl) (prometheus:make-counter :name "login_rate_limiter_banned_ips_total"
+                                                                                :help "Total count of the limiter's banned IPs.")
+          (gethash :login-rate-limiter-unbanned-ips tbl) (prometheus:make-counter :name "login_rate_limiter_unbanned_ips_total"
+                                                                                  :help "Total count of the limiter's unbanned IPs.")
+
+          (gethash :login-rate-limiter-locked-users tbl) (prometheus:make-counter :name "login_rate_limiter_locked_users_total"
+                                                                                  :help "Total count of the limiter's locked users.")
+          (gethash :login-rate-limiter-unlocked-users tbl) (prometheus:make-counter :name "login_rate_limiter_unlocked_users_total"
+                                                                                    :help "Total count of the limiter's unlocked users.")
+          (gethash :login-rate-limiter-verify-successes tbl) (prometheus:make-counter :name "login_rate_limiter_verify_successes"
+                                                                                      :help "Total count of VERIFY-LOGIN running and returning a true result.")
+          (gethash :login-rate-limiter-verify-failures tbl) (prometheus:make-counter :name "login_rate_limiter_verify_failures"
+                                                                                     :help "Total count of VERIFY-LOGIN running and returning a nil result."))))
+
 
 (defun make-login-rate-limiter (&key (max-attempts-per-minute 6) (ban-duration-minutes 30) (max-user-failures-per-minute 6) (lock-user-duration-minutes 10) (cleanup-interval-minutes 15)
                                      (computation (lambda ())) (constant-runtime 1.0) (jitter 0.1) (concurrency 4) (max-wait 0.6))
@@ -66,7 +82,12 @@
                  :max-wait max-wait))
 
 (defmethod verify-login ((self login-rate-limiter) user-key ip &optional override-computation drop-immediately?)
-  "Will use the historical frequency of verify-login attempts on a user-key and/or from an IP address,
+  "Possibly runs the underlying computation subject to the login rate limiting policies.
+   The underlying computation (overridable with OVERRIDE-COMPUTATION) should return a true value if the result is 'verified',
+   and nil otherwise. When given a USER-KEY parameter, a nil result is used to mark the try as a failure, with too many resulting
+   in the user-key being locked for some amount of time and subsequent attempts to verify resulting in an instant failure.
+
+   This method uses the historical frequency of verify-login attempts on a user-key and/or from an IP address,
    as well as the historical success or failure of the underlying computation,
    to determinme whether to proceed with the actual underlying computation this time.
 
@@ -90,11 +111,14 @@
     (return-from verify-login (make-login-failure self :locked-user override-computation drop-immediately?)))
 
   (let ((res (compute self override-computation)))
-    (when (and (compute-result-underlying-finished? res)
-               (not (compute-result-underlying-result res)))
-      (record-user-failure self user-key)
-      (when (user-rate-reached? self user-key)
-        (lock-user self user-key)))
+    (when (compute-result-underlying-finished? res)
+      (if (compute-result-underlying-result res)
+          (prometheus:counter.inc (gethash :login-rate-limiter-verify-successes (.stored-metrics self)))
+          (progn
+            (prometheus:counter.inc (gethash :login-rate-limiter-verify-failures (.stored-metrics self)))
+            (record-user-failure self user-key)
+            (when (user-rate-reached? self user-key)
+              (lock-user self user-key)))))
     res))
 
 (defmethod make-login-failure ((self login-rate-limiter) reason override-computation drop-immediately?)
@@ -151,10 +175,12 @@
 
 (defmethod ban-ip ((self login-rate-limiter) ip)
   (when ip
+    (prometheus:counter.inc (gethash :login-rate-limiter-banned-ips (.stored-metrics self)))
     (set-expiry (.banned-ips self) ip (.ban-duration-minutes self))))
 
 (defmethod lock-user ((self login-rate-limiter) user-key)
   (when user-key
+    (prometheus:counter.inc (gethash :login-rate-limiter-locked-users (.stored-metrics self)))
     (set-expiry (.locked-users self) user-key (.lock-user-duration-minutes self))))
 
 (defmethod start-maintenance-thread ((self login-rate-limiter))
@@ -197,20 +223,22 @@
       (purge (.ip-attempts limiter) purge-limit)
       (purge (.user-failures limiter) purge-limit))))
 
-(defun remove-expiry (table)
+(defun remove-expiry (table counter)
   (let ((now (now-seconds)))
     (cht:maphash (lambda (key expiry)
                    (when (and (numberp expiry) ;; seems expiry can sometimes be a luckless.hashtable::tombstone. so much for this cht...
                               (< expiry now))
+                     (prometheus:counter.inc counter)
                      (cht:remhash key table)))
                  table)))
 
 (defun cleanup-expired-bans (limiter-ptr)
   "Unbans any IPs whose ban duration has passed."
   (alexandria:when-let ((limiter (trivial-garbage:weak-pointer-value limiter-ptr)))
-    (remove-expiry (.banned-ips limiter))))
+    (remove-expiry (.banned-ips limiter) (gethash :login-rate-limiter-unbanned-ips (.stored-metrics limiter)))))
 
 (defun cleanup-locked-users (limiter-ptr)
+  "Unlocks any users whose lock duration has passed."
   (alexandria:when-let ((limiter (trivial-garbage:weak-pointer-value limiter-ptr)))
-    (remove-expiry (.locked-users limiter))))
+    (remove-expiry (.locked-users limiter) (gethash :login-rate-limiter-unlocked-users (.stored-metrics limiter)))))
 

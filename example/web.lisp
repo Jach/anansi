@@ -98,6 +98,10 @@
   (setf (hunchentoot:content-type*) "text/html; charset=utf-8")
   (funcall next))
 
+(defun @plain-text (next)
+  (setf (hunchentoot:content-type*) "text/plain; charset=utf-8")
+  (funcall next))
+
 (defun @csrf (next prefix)
   (if (csrf-valid? prefix)
       (funcall next)
@@ -161,6 +165,9 @@
   (when (hunchentoot:session-value :user-id)
     (hunchentoot:delete-session-value :user-id))
   (redir "/"))
+
+(defroute metrics ("/metrics" :acceptor-name anansi-web :decorators (@csp @plain-text)) ()
+  (prometheus.formats.text:marshal (com.thejach.anansi:.registry auth::*limiter*)))
 
 
 ;; Post

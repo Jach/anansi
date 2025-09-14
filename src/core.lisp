@@ -1,5 +1,21 @@
 (in-package #:com.thejach.anansi)
 
+(defclass metrics ()
+  ((registry :accessor .registry :initform (prometheus:make-registry))
+   (stored-metrics :accessor .stored-metrics :initform (make-hash-table :test #'equal)))
+  (:documentation "A metrics class that may be most useful as a mixin to track various data with :after or :around methods."))
+
+(defmethod initialize-instance :after ((self metrics) &key)
+  (let ((prometheus:*default-registry* (.registry self))
+        (tbl (.stored-metrics self)))
+    (setf (gethash :limiter-compute-duration tbl) (prometheus:make-summary :name "limiter_compute_duration_seconds"
+                                                                           :help "Summary of durations and counts of calls to limiter's COMPUTE.")
+          (gethash :limiter-compute-successes tbl) (prometheus:make-counter :name "limiter_compute_successes"
+                                                                            :help "Total count of successful executions of the limiter COMPUTE's underlying computation.")
+          (gethash :limiter-compute-failures tbl) (prometheus:make-counter :name "limiter_compute_failures"
+                                                                           :help "Total count of failed executions of the limiter COMPUTE's underlying computation, with a reason in the final status label."
+                                                                           :labels '("final_status")))))
+
 (defun now-seconds ()
   (float
     #+sbcl
@@ -22,7 +38,7 @@
 (let ((5s-from-now (+ 5 (now-seconds))))
   (time (sleep-until 5s-from-now)))
 
-(defclass limiter ()
+(defclass limiter (metrics)
   ((computation :accessor .computation
                 :initarg :computation
                 :initform (lambda ())
@@ -55,7 +71,18 @@
    (%wait-access-sema :accessor .wait-access-sema
                       :initform nil
                       :documentation "Internal semaphore gating wait access. Sized to %q-max once known. Provides hard back-pressure such that a flood of requests will jump immediately to waiting for constant-runtime instead of
-                                      contending for the computation semaphore or performing the underlying computation.")))
+                                      contending for the computation semaphore or performing the underlying computation."))
+   (:documentation
+     "An object of this class may perform an underlying funcall given with :computation when the client calls the method COMPUTE.
+      The behavior of the method call is determined by the object parameters. The first important parameter is :constant-runtime, which
+      guarantees that so long as :computation executes slower than this value, all function calls will appear to take as long as the constant runtime.
+      A random jitter can also be applied. The next important parameter is :concurrency. This controls how many threads can make COMPUTE calls at once.
+      If more than that amount attempt to call COMPUTE, instead of executing the underlying computation function, they will instead be put into a wait queue.
+      This wait queue has a max timeout given by :max-wait as well as hard back-pressure calculated from the execution time of the first COMPUTE.
+
+      tldr: the intent of this is to be able to limit parallel execution of potentially expensive computations (like bcrypt) so that the system's
+      resources are not overwhelmed. Using this gives a general way of wrapping the computation itself rather than higher level managing of thread spawning,
+      scheduling, or the like."))
 
 (defmethod initialize-instance :after ((limiter limiter) &key)
   (setf (.compute-sema limiter) (bt:make-semaphore :count (.concurrency limiter))))
@@ -124,6 +151,18 @@
         (setf final-result (make-success-and-wait compute-result target-time time-now)))
 
       final-result)))
+
+(defmethod compute :around ((metrics metrics) &optional override-computation immediately-wait?)
+  (declare (ignore override-computation immediately-wait?))
+  (let ((tbl (.stored-metrics metrics))
+        (res (call-next-method)))
+    (if (compute-result-underlying-finished? res)
+        (prometheus:counter.inc (gethash :limiter-compute-successes tbl))
+        (prometheus:counter.inc (gethash :limiter-compute-failures tbl) :labels (list (string-downcase (string (compute-result-final-status res))))))
+
+    (prometheus:summary.observe (gethash :limiter-compute-duration tbl) (- (compute-result-exited-at res) (compute-result-entered-at res)))
+    res))
+
 
 (defmethod wait-limit-full? ((limiter limiter))
   "If the wait access semaphore has been prepared, to try acquire it for the least amount of time possible.

@@ -6,6 +6,8 @@
   :depends-on ("bordeaux-threads"
                "luckless"
                "trivial-garbage"
+               "prometheus"
+               "prometheus.formats.text"
                "log4cl")
   :serial t
   :pathname "src"

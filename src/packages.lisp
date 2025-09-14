@@ -16,6 +16,9 @@
 
            #:login-rate-limiter
            #:make-login-rate-limiter
-           #:verify-login))
+           #:verify-login
+
+           #:.registry
+           #:.stored-metrics))
 
 
