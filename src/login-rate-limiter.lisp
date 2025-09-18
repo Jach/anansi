@@ -246,21 +246,26 @@
       (purge (.user-failures limiter) purge-limit))))
 
 (defun remove-expiry (table counter)
-  (let ((now (now-seconds)))
+  (let ((now (now-seconds))
+        (removed-keys (list)))
     (cht:maphash (lambda (key expiry)
                    (when (and (numberp expiry) ;; seems expiry can sometimes be a luckless.hashtable::tombstone. so much for this cht...
                               (< expiry now))
                      (prometheus:counter.inc counter)
+                     (push key removed-keys)
                      (cht:remhash key table)))
-                 table)))
+                 table)
+    removed-keys))
 
 (defun cleanup-expired-bans (limiter-ptr)
   "Unbans any IPs whose ban duration has passed."
   (alexandria:when-let ((limiter (trivial-garbage:weak-pointer-value limiter-ptr)))
-    (remove-expiry (.banned-ips limiter) (gethash :login-rate-limiter-unbanned-ips (.stored-metrics limiter)))))
+    (alexandria:when-let ((removed-keys (remove-expiry (.banned-ips limiter) (gethash :login-rate-limiter-unbanned-ips (.stored-metrics limiter)))))
+      (log (format nil "~a" limiter) :info (format nil "Unbanned IPs ~a" removed-keys)))))
 
 (defun cleanup-locked-users (limiter-ptr)
   "Unlocks any users whose lock duration has passed."
   (alexandria:when-let ((limiter (trivial-garbage:weak-pointer-value limiter-ptr)))
-    (remove-expiry (.locked-users limiter) (gethash :login-rate-limiter-unlocked-users (.stored-metrics limiter)))))
+    (alexandria:when-let ((removed-keys (remove-expiry (.locked-users limiter) (gethash :login-rate-limiter-unlocked-users (.stored-metrics limiter)))))
+      (log (format nil "~a" limiter) :info (format nil "Unlocked user-keys ~a" removed-keys)))))
 
