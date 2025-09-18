@@ -7,8 +7,7 @@
                "luckless"
                "trivial-garbage"
                "prometheus"
-               "prometheus.formats.text"
-               "log4cl")
+               "prometheus.formats.text")
   :serial t
   :pathname "src"
   :components ((:file "packages")
@@ -26,6 +25,8 @@
                "hunchentoot"
                "easy-routes"
                "spinneret"
+
+               "vom"
 
                "str"
                "cl-dbi"

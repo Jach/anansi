@@ -1,5 +1,17 @@
 (in-package #:com.thejach.anansi)
 
+(defvar *logger* (lambda (level msg)
+                   (format nil "~a - ~a" level msg))
+  "Logger function called at various places in the library. The end user
+   ought to override this for their own preferred backend.
+   Levels are either :info or :debug.
+   Messages will start with something like #<LIMITER {12141AB663}> to designate
+   which limiter object was responsible for the log message.")
+
+(declaim (inline log))
+(defun log (obj level msg)
+  (funcall *logger* level (format nil "~a - ~a" (identity obj) msg)))
+
 (defclass metrics ()
   ((registry :accessor .registry :initform (prometheus:make-registry))
    (stored-metrics :accessor .stored-metrics :initform (make-hash-table :test #'equal)))
@@ -84,8 +96,12 @@
       resources are not overwhelmed. Using this gives a general way of wrapping the computation itself rather than higher level managing of thread spawning,
       scheduling, or the like."))
 
-(defmethod initialize-instance :after ((limiter limiter) &key)
-  (setf (.compute-sema limiter) (bt:make-semaphore :count (.concurrency limiter))))
+(defmethod initialize-instance :after ((self limiter) &key)
+  (log self :debug (format nil "Created new LIMITER object with options: ~a" (list :constant-runtime (.constant-runtime self)
+                                                                                   :jitter (.jitter self)
+                                                                                   :concurrency (.concurrency self)
+                                                                                   :max-wait (.max-wait self))))
+  (setf (.compute-sema self) (bt:make-semaphore :count (.concurrency self))))
 
 (defun make-limiter (&key (computation (lambda ())) (constant-runtime 1.0) (jitter 0.1) (concurrency 4) (max-wait 0.6))
   (make-instance 'limiter
@@ -131,10 +147,14 @@
   (let* ((time-now (now-seconds))
          (target-time (+ time-now (.constant-runtime limiter) (* (random 1.0) (.jitter limiter)))))
     (when (or immediately-wait? (wait-limit-full? limiter))
+      (if immediately-wait?
+          (log limiter :debug "Called compute with immediately-wait, skipping to waiting until target time.")
+          (log limiter :debug "Wait limit full, applying hard back-pressure and skipping this attempt."))
       (return-from compute
                    (make-failure-and-wait :wait-limit-full target-time time-now))) ; Hard back-pressure, skip any attempt at computing or waiting to compute
 
     (when (not (acquire-compute-semaphore? limiter))
+      (log limiter :debug "Exceeded max wait time.")
       (return-from compute
                    (make-failure-and-wait :exceeded-max-wait target-time time-now)))
 
@@ -150,6 +170,7 @@
         (prepare-wait-semaphore-on-first-compute limiter (- (now-seconds) time-now))
         (setf final-result (make-success-and-wait compute-result target-time time-now)))
 
+      (log limiter :debug "Successfully executed computation")
       final-result)))
 
 (defmethod compute :around ((metrics metrics) &optional override-computation immediately-wait?)
@@ -192,6 +213,7 @@
                               (/ (.max-wait limiter) (if (zerop wait-and-computation-time)
                                                          (* 0.2 (.constant-runtime limiter))
                                                          wait-and-computation-time))))))))
+      (log limiter :debug (format nil "Measured time to first computation finishing as ~,4fs. Setting q-max to ~a." wait-and-computation-time q-max))
       (setf (.q-max limiter) q-max)
       (setf (.wait-access-sema limiter) (bt:make-semaphore :count q-max)))))
 

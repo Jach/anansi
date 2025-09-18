@@ -27,7 +27,6 @@
   (let ((lim-ptr))
     (let ((lim (make-test-limiter :verify-deadline 0.1)))
       (setf lim-ptr (sb-ext:make-weak-pointer lim))
-      (compute lim)
       (is-true (sb-ext:search-roots lim-ptr :print nil)))
 
     (sleep 0.2)

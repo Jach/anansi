@@ -49,6 +49,11 @@
                    attempts to an underlying expensive pw hash computation by IP address and also on a user id/key."))
 
 (defmethod initialize-instance :after ((self login-rate-limiter) &key)
+  (log self :debug (format nil "Created new LOGIN-RATE-LIMITER object with options: ~a" (list :max-attempts-per-minute (.max-attempts-per-minute self)
+                                                                                              :ban-duration-minutes (.ban-duration-minutes self)
+                                                                                              :max-user-failures-per-minute (.max-user-failures-per-minute self)
+                                                                                              :lock-user-duration-minutes (.lock-user-duration-minutes self)
+                                                                                              :cleanup-interval-minutes (.cleanup-interval-minutes self))))
   (start-maintenance-thread self)
   (let ((prometheus:*default-registry* (.registry self))
         (tbl (.stored-metrics self)))
@@ -100,6 +105,7 @@
    If it is decided not to proceed, the returned result will be a failure with a reason in the status field such as :banned-ip.
    Unless drop-immediately? is given, the call duration will still be the configured constant duration."
   (when (banned-ip? self ip)
+    (log self :info (format nil "Rejected login attempt from banned IP: ~a" ip))
     (return-from verify-login (make-login-failure self :banned-ip override-computation drop-immediately?)))
 
   (record-ip-attempt self ip)
@@ -108,18 +114,26 @@
     (return-from verify-login (make-login-failure self :rate-limited override-computation drop-immediately?)))
 
   (when (locked-user? self user-key)
+    (log self :info (format nil "Rejected login attempt from IP ~a because user-key \"~a\" is locked" ip user-key))
     (return-from verify-login (make-login-failure self :locked-user override-computation drop-immediately?)))
 
   (let ((res (compute self override-computation)))
     (when (compute-result-underlying-finished? res)
       (if (compute-result-underlying-result res)
-          (prometheus:counter.inc (gethash :login-rate-limiter-verify-successes (.stored-metrics self)))
-          (progn
-            (prometheus:counter.inc (gethash :login-rate-limiter-verify-failures (.stored-metrics self)))
-            (record-user-failure self user-key)
-            (when (user-rate-reached? self user-key)
-              (lock-user self user-key)))))
-    res))
+          (mark-success self user-key ip)
+          (mark-failure self user-key ip))
+    res)))
+
+(defun mark-success (self user-key ip)
+  (log self :info (format nil "Successful login computation from IP ~a against user-key \"~a\"" ip user-key))
+  (prometheus:counter.inc (gethash :login-rate-limiter-verify-successes (.stored-metrics self))))
+
+(defun mark-failure (self user-key ip)
+  (log self :info (format nil "Failed login computation from IP ~a against user-key \"~a\"" ip user-key))
+  (prometheus:counter.inc (gethash :login-rate-limiter-verify-failures (.stored-metrics self)))
+  (record-user-failure self user-key)
+  (when (user-rate-reached? self user-key)
+    (lock-user self user-key)))
 
 (defmethod make-login-failure ((self login-rate-limiter) reason override-computation drop-immediately?)
   (if drop-immediately?
@@ -175,11 +189,13 @@
 
 (defmethod ban-ip ((self login-rate-limiter) ip)
   (when ip
+    (log self :info (format nil "Rate limit reached, banning IP: ~a" ip))
     (prometheus:counter.inc (gethash :login-rate-limiter-banned-ips (.stored-metrics self)))
     (set-expiry (.banned-ips self) ip (.ban-duration-minutes self))))
 
 (defmethod lock-user ((self login-rate-limiter) user-key)
   (when user-key
+    (log self :info (format nil "Max attempts on user-key \"~a\" reached, locking user" user-key))
     (prometheus:counter.inc (gethash :login-rate-limiter-locked-users (.stored-metrics self)))
     (set-expiry (.locked-users self) user-key (.lock-user-duration-minutes self))))
 

@@ -1,5 +1,6 @@
 (defpackage #:com.thejach.anansi
   (:use #:cl)
+  (:shadow #:log)
   (:local-nicknames (#:cht #:org.shirakumo.luckless.hashtable))
   (:export #:limiter
            #:make-limiter
@@ -19,6 +20,8 @@
            #:verify-login
 
            #:.registry
-           #:.stored-metrics))
+           #:.stored-metrics
+
+           #:*logger*))
 
 
