@@ -219,6 +219,12 @@
   (cleanup-expired-bans weak-ptr)
   (cleanup-locked-users weak-ptr)
   (alexandria:when-let ((limiter (trivial-garbage:weak-pointer-value weak-ptr)))
+    (log (format nil "~a" limiter) :debug (format nil "Periodic cleanup completed. Sizes of tables: (~@{~a ~})"
+                                                  :ip-attempts (cht:size (.ip-attempts limiter))
+                                                  :user-failures (cht:size (.user-failures limiter))
+                                                  :banned-ips (cht:size (.banned-ips limiter))
+                                                  :locked-users (cht:size (.locked-users limiter)))))
+  (alexandria:when-let ((limiter (trivial-garbage:weak-pointer-value weak-ptr)))
     (sleep (* 60 (.cleanup-interval-minutes limiter)))
     t))
 
