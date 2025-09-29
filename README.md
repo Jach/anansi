@@ -10,8 +10,6 @@
      /    |    \
 ```
 
-Current status: WIP
-
 This library provides a way to rate-limit function calls with a special configurable login verification component for use in a web application. The main purpose
 of the login component is to augment the standard verification flow of "Take password -> hash -> compare with stored DB hash" with some protections against
 server abuse, specifically denial of service (DoS).
@@ -20,6 +18,10 @@ This becomes more important when using a hash function like bcrypt, because the 
 way, if a large database table is compromised an attacker can't feasibly try to crack every record's hash even with common passwords, which they could trivially
 do if a faster hash like sha256 was used.
 
+Of course, another common solution to this problem is to just run the login/registration/other auth stuff on an entirely separate machine, or at least in a
+separate process that can have various high-level Linux tools apply CPU/memory/etc. limits to directly. But I like the idea of everything in one Lisp image when
+practical.
+
 # API
 
 The anansi project contains the following systems:
@@ -27,36 +29,42 @@ The anansi project contains the following systems:
 * anansi
 * anansi/test
 * anansi/example
+* anansi/web-test
 
 The `anansi` system creates the following packages and exported symbols:
 
 * `com.thejach.anansi`
     * `limiter` -- the general limiter class
-    * `make-limiter` -- optional wrapper constructor around `make-instance`
+    * `make-limiter` -- an optional wrapper constructor around `make-instance`
         * Allows for 5 keyword options: `:computation` (your zero-argument function), `:constant-runtime` (fixed time of execution), `:jitter` (random max of extra jitter time),
           `:concurrency` (how many computations can run at once), and `:max-wait` (how long a computation can wait before starting to run)
-    * `compute` -- core method to call which may or may not invoke the underlying computation function, but will execute in fixed constant-runtime+jitter regardless
+    * `compute` -- the core method to call which may or may not invoke the underlying computation function, but will execute in fixed constant-runtime+jitter regardless
         * Takes two optional parameters: `override-computation` is a function that will be called instead of the underlying computation (if given) stored at
           object creation time; `immediately-wait?` will result in the call sleeping for the expected constant-runtime+jitter duration without doing anything
           else.
-    * `compute-result` -- result struct returned by `compute`, with the following 3 accessors:
+        * Besides the `override-computation` argument, you can also customize or change the underlying computation with the `.computation` accessor, or the
+          `with-computation` macro.
+    * `compute-result` -- the result struct returned by `compute`, with the following 3 accessors:
         * `compute-result-underlying-finished?` -- true only if the underlying function was successfully called
         * `compute-result-underlying-result` -- if the underlying function was called, this is the value that was returned
         * `compute-result-final-status` -- a keyword, will be `:succeeded` if `underlying-finished?` is true, otherwise will be some other keyword indicating a failure reason.
     * `login-rate-limiter` -- a further specialized version of the general limiter class with options for banning IPs or locking out user ids if compute (login)
       attempts are too frequent.
-    * `make-login-rate-limiter` -- optional wrapper constructor around `make-instance`
+    * `make-login-rate-limiter` -- an optional wrapper constructor around `make-instance`
         * Besides the keys to `make-limiter`, allows for 5 other options: `:max-attempts-per-minute` (rate that if exceeded results in an IP ban),
           `:ban-duration-minutes` (how long an IP ban lasts), `:max-user-failures-per-minute` (rate of attempts by any IP against a particular user id before
           that user id is locked out), `:lock-user-duration-minutes` (how long a user id can be locked out), `:cleanup-interval-minutes` (how often a background
           maintenance thread runs to manage unbanning/unlocking tasks and keep the records from growing without bound)
-    * `verify-login` -- core method to call, takes additional required arguments `user-key` and `ip`. Invokes the underlying `compute` if and only if the given
+    * `verify-login` -- the core method to call, takes additional required arguments `user-key` and `ip`. Invokes the underlying `compute` if and only if the given
       arguments aren't for a banned ip or locked user.
         * If the given `user-key` and `ip` are both `nil`, then this behaves the same as `compute`. You can leave just one `nil` to only get the other's
           behavior.
         * Takes two optional parameters: `override-computation` is again a function that will be used instead of any stored underlying function;
           `drop-immediately?` when true will result in the function call returning immediately for a banned user or locked account instead of continuing to
           sleep for the constant-runtime+jitter duration.
+    * `.registry` -- a registry of Prometheus metrics (themselves available with `.stored-metrics`) associated with the limiter object.
+    * `*logger*` -- a function taking a log level and message string, expected to be `setf`'d by application code to receive various log messages from this
+      library into the application's preferred logging framework.
 
 ## Example
 
@@ -121,7 +129,10 @@ they may be unable to while the attack persists.
 
 # Logging
 
-Still todo.
+At various moments in `core.lisp` and `login-rate-limiter.lisp` the function `log` is called with various information. For example, notice that a partiuclar IP
+address was banned. The `*logger*` special variable can be `setf`'d by application code (see the example's `main.lisp` for doing it with vom). This may be
+especially useful to push logs to a log file which can be further processed by system-level tools like fail2ban to drop bad-actor IPs before they even hit the
+Lisp application, or apply more complex ban schemes like exponential timeouts, and so on.
 
 # Metrics
 

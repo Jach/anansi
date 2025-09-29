@@ -125,3 +125,8 @@
     (is (eql :succeeded (compute-result-final-status
                           (verify-login lim user-id (rand-str)))))))
 
+#+sbcl
+(test cleanup
+  "Just a short sbcl GC as an attempt to clean up any threads created by above. Keeps the webdriver vom log outputs cleaner too."
+  (sb-ext:gc :full t)
+  (sleep 0.2))

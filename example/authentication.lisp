@@ -1,12 +1,16 @@
 (defpackage #:com.thejach.anansi/example.authentication
   (:use #:cl)
   (:local-nicknames (#:anansi #:com.thejach.anansi))
-  (:export #:verify-login
+  (:export #:create-limiter
+           #:verify-login
            #:generate-hash))
 
 (in-package #:com.thejach.anansi/example.authentication)
 
-(defparameter *limiter* (anansi:make-login-rate-limiter))
+(defparameter *limiter* nil)
+
+(defun create-limiter ()
+  (setf *limiter* (anansi:make-login-rate-limiter)))
 
 (defun check-password-against-hash (password hash)
   (handler-case

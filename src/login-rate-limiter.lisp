@@ -125,11 +125,11 @@
     res)))
 
 (defun mark-success (self user-key ip)
-  (log self :info (format nil "Successful login computation from IP ~a against user-key \"~a\"" ip user-key))
+  (log self :info (format nil "Successful login-rate-limiter computation from IP ~a against user-key \"~a\"" ip user-key))
   (prometheus:counter.inc (gethash :login-rate-limiter-verify-successes (.stored-metrics self))))
 
 (defun mark-failure (self user-key ip)
-  (log self :info (format nil "Failed login computation from IP ~a against user-key \"~a\"" ip user-key))
+  (log self :info (format nil "Failed login-rate-limiter computation from IP ~a against user-key \"~a\"" ip user-key))
   (prometheus:counter.inc (gethash :login-rate-limiter-verify-failures (.stored-metrics self)))
   (record-user-failure self user-key)
   (when (user-rate-reached? self user-key)
@@ -219,11 +219,12 @@
   (cleanup-expired-bans weak-ptr)
   (cleanup-locked-users weak-ptr)
   (alexandria:when-let ((limiter (trivial-garbage:weak-pointer-value weak-ptr)))
-    (log (format nil "~a" limiter) :debug (format nil "Periodic cleanup completed. Sizes of tables: (~@{~a ~})"
-                                                  :ip-attempts (cht:size (.ip-attempts limiter))
-                                                  :user-failures (cht:size (.user-failures limiter))
-                                                  :banned-ips (cht:size (.banned-ips limiter))
-                                                  :locked-users (cht:size (.locked-users limiter)))))
+    (log (format nil "~a" limiter) :debug (format nil "Periodic cleanup completed. Next cleanup in ~a minutes. Counts of tables: (~@{~a ~})"
+                                                  (.cleanup-interval-minutes limiter)
+                                                  :ip-attempts (cht:count (.ip-attempts limiter))
+                                                  :user-failures (cht:count (.user-failures limiter))
+                                                  :banned-ips (cht:count (.banned-ips limiter))
+                                                  :locked-users (cht:count (.locked-users limiter)))))
   (alexandria:when-let ((limiter (trivial-garbage:weak-pointer-value weak-ptr)))
     (sleep (* 60 (.cleanup-interval-minutes limiter)))
     t))

@@ -1,6 +1,6 @@
 (asdf:defsystem "anansi"
   :description "Rate-limited function calls with special support for mitigating potential denial of service on web login forms."
-  :version "0.1.0"
+  :version "1.0"
   :author "Jach <github@thejach.com>"
   :license "Unlicense / Public Domain"
   :depends-on ("bordeaux-threads"
