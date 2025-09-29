@@ -72,7 +72,7 @@ An example is made in the `anansi/example` system. The two most important files 
 
 * [`example/authentication.lisp`](example/authentication.lisp) -- here a login-rate-limiter is created as a singleton shared by the login and registration flows. It is used by two functions
   for the two flows to wrap the expensive bcrypt computation/check within the limiter, with the registration side only checking rate limits for IPs.
-* [`example/web.lisp`](example/web.lisp) -- the two `defroute` forms for `login` and `register` naer the bottom of the file handle the POST requests for their respective forms. Various data validation is done
+* [`example/web.lisp`](example/web.lisp) -- the two `defroute` forms for `login` and `register` near the bottom of the file handle the POST requests for their respective forms. Various data validation is done
   and ultimately the login flow calls `auth:verify-login` with a given user id, IP address, password, and password hash, and shows how to use the
   returned `compute-result-...` to extract various information beyond a plain pass/fail. Similarly for the registration flow, but it calls `auth:generate-hash`
   passing the password to hash and the IP address.
@@ -82,7 +82,7 @@ You can load the example system and (recommended if in a REPL) evaluate `(bt:mak
 
 # Design Notes
 
-All calls to `compute` or `verify-login` must finish in a constant runtime / deadline D (default 1s) plus jitter J (default random up to 0.1s), regardless of whether the login check or whatever other computatin specified is successful or not. An attacker ideally should not be able to
+All calls to `compute` or `verify-login` must finish in a constant runtime / deadline D (default 1s) plus jitter J (default random up to 0.1s), regardless of whether the login check or whatever other computation specified is successful or not. An attacker ideally should not be able to
 distinguish between failure because of incorrect password, failure because a user doesn't exist, failure because the computation was skipped due to dropping
 their requests for abuse or due to server load, or timing information that might be related to the length of either the password or the hashed value.
 
@@ -124,12 +124,12 @@ some amount, then subsequent requests on that user by any IP are temporarily loc
 
 It may be more desirable to have shorter bans/locks with exponentially increasing times for repeat offenders. However I would suggest instead setting up a
 higher level rule with a service like fail2ban which reads logs about bans and can apply its own ban logic to block requests before they even hit the Lisp web
-server. As for user locks, you may wish to notify the legimate user via an email that their account is undergoing an attack and that if they need to login again
+server. As for user locks, you may wish to notify the legitimate user via an email that their account is undergoing an attack and that if they need to login again
 they may be unable to while the attack persists.
 
 # Logging
 
-At various moments in `core.lisp` and `login-rate-limiter.lisp` the function `log` is called with various information. For example, notice that a partiuclar IP
+At various moments in `core.lisp` and `login-rate-limiter.lisp` the function `log` is called with various information. For example, logging that a particular IP
 address was banned. The `*logger*` special variable can be `setf`'d by application code (see the example's `main.lisp` for doing it with vom). This may be
 especially useful to push logs to a log file which can be further processed by system-level tools like fail2ban to drop bad-actor IPs before they even hit the
 Lisp application, or apply more complex ban schemes like exponential timeouts, and so on.
