@@ -1,4 +1,4 @@
-(in-package #:anansi-tests)
+(in-package #:anansi-web-tests)
 
 (def-suite webdriver-suite)
 

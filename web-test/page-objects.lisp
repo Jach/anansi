@@ -1,4 +1,4 @@
-(in-package #:anansi-tests)
+(in-package #:anansi-web-tests)
 
 ;;;; This file is to support selenium webdriver tests. Details about URLs and where on the page various elements are should be
 ;;;; encapsulated in here.

@@ -10,7 +10,7 @@
                "prometheus.formats.text")
   :serial t
   :pathname "src"
-  :components ((:file "packages")
+  :components ((:file "package")
                (:file "core")
                (:file "login-rate-limiter"))
   :in-order-to ((asdf:test-op (asdf:test-op "anansi/test"))))
@@ -37,24 +37,30 @@
                (:file "db")
                (:file "authentication")
                (:file "web")
-               (:file "main")))
+               (:file "main"))
+  :in-order-to ((asdf:test-op (asdf:test-op "anansi/web-test"))))
 
 
 (asdf:defsystem "anansi/test"
   :depends-on ("anansi"
-               "anansi/example"
                "fiveam"
-               "cl-webdriver-client"
-               "cl-mock"
 
-               "ironclad"
-               "str")
+               "ironclad")
   :serial t
   :pathname "test"
   :components ((:file "package")
                (:file "limiter-tests")
-               (:file "login-tests")
+               (:file "login-tests"))
+  :perform (asdf:test-op (o c) (uiop:symbol-call ':5am '#:run-all-tests ':summary ':suite)))
+
+(asdf:defsystem "anansi/web-test"
+  :depends-on ("anansi/example"
+               "fiveam"
+               "cl-mock"
+               "cl-webdriver-client")
+  :serial t
+  :pathname "web-test"
+  :components ((:file "package")
                (:file "page-objects")
                (:file "webdriver-tests"))
   :perform (asdf:test-op (o c) (uiop:symbol-call ':5am '#:run-all-tests ':summary ':suite)))
-
