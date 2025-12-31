@@ -1,4 +1,5 @@
 # Anansi
+[![Build Status](https://jenkins.thejach.com/buildStatus/icon?job=anansi&style=plastic)](https://jenkins.thejach.com/job/anansi/)
 
 ```
      \    |    /
