@@ -8,6 +8,7 @@ Pass an additional argument, --skip-webdriver, to skip the webdriver tests.
                                        (user-homedir-pathname))))
   (when (probe-file quicklisp-init)
     (load quicklisp-init)))
+(require :uiop)
 
 (defvar *system* "anansi")
 (defvar *system2* "anansi/example")
