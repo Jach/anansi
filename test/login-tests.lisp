@@ -34,7 +34,8 @@
 
 #+sbcl
 (test maintenance-thread-garbage-collected
-  "Tries to force a garbage collect after the limiter goes out of scope and have the maintenance thread end itself."
+  "Tries to force a garbage collect after the limiter goes out of scope and have the maintenance thread end itself.
+   Warning, can be a flakey test..."
   (let ((thread-name))
     (let ((lim (make-test-limiter)))
       (setf thread-name (bt:thread-name (com.thejach.anansi::.maintenance-thread lim)))
@@ -43,7 +44,11 @@
                           (equal thread-name (bt:thread-name thread)))
                         (bt:all-threads))))
     (sb-ext:gc :full t)
-    (sleep 2) ; twice the cleanup-interval seconds
+    (sleep 1) ; cleanup-interval
+    (sb-ext:gc :full t)
+    (sleep 1) ; twice the interval
+    (sb-ext:gc :full t)
+    (sleep 0.5) ; almost thrice the interval
     (is-false (find-if (lambda (thread)
                          (equal thread-name (bt:thread-name thread)))
                        (bt:all-threads)))))
