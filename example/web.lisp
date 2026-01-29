@@ -223,7 +223,7 @@
                              username))
 
             (let ((hashed-pw (anansi:compute-result-underlying-result result)))
-              (db:with-connection (conn)
+              (db:with-connection (conn :writer? t)
                 (db:insert-user conn username hashed-pw))
               (grant-session username)
               (redir "/welcome")))))

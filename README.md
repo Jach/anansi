@@ -69,7 +69,7 @@ The `anansi` system creates the following packages and exported symbols:
 
 ## Example
 
-An example is made in the `anansi/example` system. The two most important files to look at are:
+An example web service showcasing a user registration/login flow is made in the `anansi/example` system. The two most important files to look at are:
 
 * [`example/authentication.lisp`](example/authentication.lisp) -- here a login-rate-limiter is created as a singleton shared by the login and registration flows. It is used by two functions
   for the two flows to wrap the expensive bcrypt computation/check within the limiter, with the registration side only checking rate limits for IPs.
@@ -78,8 +78,9 @@ An example is made in the `anansi/example` system. The two most important files 
   returned `compute-result-...` to extract various information beyond a plain pass/fail. Similarly for the registration flow, but it calls `auth:generate-hash`
   passing the password to hash and the IP address.
 
-You can load the example system and (recommended if in a REPL) evaluate `(bt:make-thread #'com.thejach.anansi/example:main)` to start the example webapp on port
-56142.
+To run, first load the example system with `(ql:quickload "anansi/example")`.
+Next, you should create the default sqlite database by evaluating `(com.thejach.anansi/example.db:db-setup)`. It will create db.sqlite3 in the example folder.
+Finally, evaluate `(bt:make-thread #'com.thejach.anansi/example:main)` to start the example webapp on port 56142 within its own thread.
 
 # Design Notes
 
