@@ -6,8 +6,10 @@
 
 (def-fixture fresh-session-server-and-db ()
   "Creates a fresh webdriver session, example server, and db."
-  (let ((db-name #p"/tmp/test-db.sqlite))"))
+  (let ((db-name "/tmp/test-db.sqlite"))
     (uiop:delete-file-if-exists db-name)
+    (uiop:delete-file-if-exists (uiop:strcat db-name "-wal"))
+    (uiop:delete-file-if-exists (uiop:strcat db-name "-shm"))
     (cl-mock:with-mocks ()
       (cl-mock:answer (com.thejach.anansi/example.config:server-port) 8182)
       (cl-mock:answer (com.thejach.anansi/example.config:db-name) db-name)
