@@ -43,7 +43,10 @@
                                  :documentation "How many minutes old observations can be before they're purged.")
    (%maintenance-thread :accessor .maintenance-thread
                         :initform nil
-                        :documentation "Thread for maintenance tasks."))
+                        :documentation "Thread for maintenance tasks.")
+   (%maintenance-thread-end? :accessor .maintenance-thread-end?
+                             :initform nil
+                             :documentation "Set to force the maintenance thread to end on its next interval, instead of when the GC decides to purge the limiter object."))
 
   (:documentation "A variant of the main limiter class. This version exposes a new verify-login method to aid in limiting
                    attempts to an underlying expensive pw hash computation by IP address and also on a user id/key."))
@@ -104,6 +107,9 @@
 
    If it is decided not to proceed, the returned result will be a failure with a reason in the status field such as :banned-ip.
    Unless drop-immediately? is given, the call duration will still be the configured constant duration."
+  (when (.maintenance-thread-end? self)
+    (log self :debug "Warning: maintenance thread for this limiter was stopped."))
+
   (when (banned-ip? self ip)
     (log self :info (format nil "Rejected login attempt from banned IP: ~a" ip))
     (return-from verify-login (make-login-failure self :banned-ip override-computation drop-immediately?)))
@@ -124,6 +130,7 @@
           (mark-failure self user-key ip))
     res)))
 
+
 (defun mark-success (self user-key ip)
   (log self :info (format nil "Successful login-rate-limiter computation from IP ~a against user-key \"~a\"" ip user-key))
   (prometheus:counter.inc (gethash :login-rate-limiter-verify-successes (.stored-metrics self))))
@@ -134,6 +141,7 @@
   (record-user-failure self user-key)
   (when (user-rate-reached? self user-key)
     (lock-user self user-key)))
+
 
 (defmethod make-login-failure ((self login-rate-limiter) reason override-computation drop-immediately?)
   (if drop-immediately?
@@ -218,16 +226,23 @@
   (cleanup-old-attempts weak-ptr)
   (cleanup-expired-bans weak-ptr)
   (cleanup-locked-users weak-ptr)
-  (alexandria:when-let ((limiter (trivial-garbage:weak-pointer-value weak-ptr)))
+  (when-let ((limiter (trivial-garbage:weak-pointer-value weak-ptr)))
+    (when (.maintenance-thread-end? limiter)
+      (return-from cleanup nil)))
+  (when-let ((limiter (trivial-garbage:weak-pointer-value weak-ptr)))
     (log (format nil "~a" limiter) :debug (format nil "Periodic cleanup completed. Next cleanup in ~a minutes. Counts of tables: (~@{~a ~})"
                                                   (.cleanup-interval-minutes limiter)
                                                   :ip-attempts (cht:count (.ip-attempts limiter))
                                                   :user-failures (cht:count (.user-failures limiter))
                                                   :banned-ips (cht:count (.banned-ips limiter))
                                                   :locked-users (cht:count (.locked-users limiter)))))
-  (alexandria:when-let ((limiter (trivial-garbage:weak-pointer-value weak-ptr)))
+  (when-let ((limiter (trivial-garbage:weak-pointer-value weak-ptr)))
     (sleep (* 60 (.cleanup-interval-minutes limiter)))
     t))
+
+(defmethod stop-login-rate-limiter-maintenance-thread ((self login-rate-limiter))
+  "Signals the maintenance thread to end on its next interval."
+  (setf (.maintenance-thread-end? self) t))
 
 (defun purge (table purge-limit)
   (cht:maphash (lambda (key attempts)
@@ -241,7 +256,7 @@
 
 (defun cleanup-old-attempts (limiter-ptr)
   "Keeps the hash tables from growing too much by removing any records whose last timestamp was older than the purge time."
-  (alexandria:when-let ((limiter (trivial-garbage:weak-pointer-value limiter-ptr)))
+  (when-let ((limiter (trivial-garbage:weak-pointer-value limiter-ptr)))
     (let ((purge-limit (- (now-seconds) (* 60 (.purge-records-after-minutes limiter)))))
       (purge (.ip-attempts limiter) purge-limit)
       (purge (.user-failures limiter) purge-limit))))
@@ -260,13 +275,13 @@
 
 (defun cleanup-expired-bans (limiter-ptr)
   "Unbans any IPs whose ban duration has passed."
-  (alexandria:when-let ((limiter (trivial-garbage:weak-pointer-value limiter-ptr)))
-    (alexandria:when-let ((removed-keys (remove-expiry (.banned-ips limiter) (gethash :login-rate-limiter-unbanned-ips (.stored-metrics limiter)))))
+  (when-let ((limiter (trivial-garbage:weak-pointer-value limiter-ptr)))
+    (when-let ((removed-keys (remove-expiry (.banned-ips limiter) (gethash :login-rate-limiter-unbanned-ips (.stored-metrics limiter)))))
       (log (format nil "~a" limiter) :info (format nil "Unbanned IPs ~a" removed-keys)))))
 
 (defun cleanup-locked-users (limiter-ptr)
   "Unlocks any users whose lock duration has passed."
-  (alexandria:when-let ((limiter (trivial-garbage:weak-pointer-value limiter-ptr)))
-    (alexandria:when-let ((removed-keys (remove-expiry (.locked-users limiter) (gethash :login-rate-limiter-unlocked-users (.stored-metrics limiter)))))
+  (when-let ((limiter (trivial-garbage:weak-pointer-value limiter-ptr)))
+    (when-let ((removed-keys (remove-expiry (.locked-users limiter) (gethash :login-rate-limiter-unlocked-users (.stored-metrics limiter)))))
       (log (format nil "~a" limiter) :info (format nil "Unlocked user-keys ~a" removed-keys)))))
 

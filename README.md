@@ -56,6 +56,8 @@ The `anansi` system creates the following packages and exported symbols:
           `:ban-duration-minutes` (how long an IP ban lasts), `:max-user-failures-per-minute` (rate of attempts by any IP against a particular user id before
           that user id is locked out), `:lock-user-duration-minutes` (how long a user id can be locked out), `:cleanup-interval-minutes` (how often a background
           maintenance thread runs to manage unbanning/unlocking tasks and keep the records from growing without bound)
+        * Constructing a new login-rate-limiter object also creates a background maintenance thread, which should automatically end if the limiter object itself
+          is garbage collected, however you can end it manually by calling `stop-login-rate-limiter-maintenance-thread`.
     * `verify-login` -- the core method to call, takes additional required arguments `user-key` and `ip`. Invokes the underlying `compute` if and only if the given
       arguments aren't for a banned ip or locked user.
         * If the given `user-key` and `ip` are both `nil`, then this behaves the same as `compute`. You can leave just one `nil` to only get the other's

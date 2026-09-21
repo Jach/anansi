@@ -53,3 +53,9 @@
         (enter-password login-page "secret")
         (click-submit-button login-page))
       (is-true (on-welcome-page?))))
+
+#+sbcl
+(test cleanup
+  "Just a short sbcl GC as an attempt to clean up any threads created by above. Keeps the webdriver vom log outputs cleaner too."
+  (sb-ext:gc :full t)
+  (sleep 0.2))

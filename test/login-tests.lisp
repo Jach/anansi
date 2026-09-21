@@ -53,6 +53,33 @@
                          (equal thread-name (bt:thread-name thread)))
                        (bt:all-threads)))))
 
+(test maintenance-thread-manually-ended
+  "Tries to end the maintenance thread explicitly."
+  (let* ((lim (make-test-limiter))
+         (thread-name (bt:thread-name (com.thejach.anansi::.maintenance-thread lim))))
+    (is-true (find-if (lambda (thread) (equal thread-name (bt:thread-name thread)))
+                      (bt:all-threads)))
+
+    (stop-login-rate-limiter-maintenance-thread lim)
+    (sleep 1.5) ; cleanup interval
+    (is-false (find-if (lambda (thread) (equal thread-name (bt:thread-name thread)))
+                       (bt:all-threads)))))
+
+(test warns-when-maintenance-thread-manually-ended
+  "If trying to verify login after ending the maintenance thread, detect the warning."
+  (let ((lim (make-test-limiter)))
+    (let* ((messages '())
+           (*logger* (lambda (level msg) (when (eql level :debug) (push msg messages)))))
+      (verify-login lim nil nil (lambda () :ok))
+      (is-false (search "Warning: maintenance thread" (first (last messages)))))
+
+    (stop-login-rate-limiter-maintenance-thread lim)
+
+    (let* ((messages '())
+           (*logger* (lambda (level msg) (when (eql level :debug) (push msg messages)))))
+      (verify-login lim nil nil (lambda () :ok))
+      (is-true (search "Warning: maintenance thread" (first (last messages)))))))
+
 (test basic-verification
   "Test basic login verification"
   (let* ((lim (make-test-limiter))

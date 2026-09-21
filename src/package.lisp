@@ -18,10 +18,13 @@
            #:login-rate-limiter
            #:make-login-rate-limiter
            #:verify-login
+           #:stop-login-rate-limiter-maintenance-thread
 
            #:.registry
            #:.stored-metrics
 
-           #:*logger*))
+           #:*logger*)
+  (:import-from #:alexandria
+                #:when-let))
 
 
