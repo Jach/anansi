@@ -23,10 +23,13 @@
   (setf com.thejach.anansi:*logger* #'logger))
 
 (defun start ()
+  (setup-logging)
+  (com.thejach.anansi/example.authentication:create-limiter)
   (com.thejach.anansi/example.web:start))
 
 (defun stop ()
   (format t "~%Stopping~%")
+  (com.thejach.anansi/example.authentication:destroy-limiter)
   (com.thejach.anansi/example.web:stop))
 
 (defun exit-cleanly ()
@@ -39,8 +42,6 @@
   (uiop:quit 1))
 
 (defun main ()
-  (setup-logging)
-  (com.thejach.anansi/example.authentication:create-limiter)
   (handler-bind
     ((serious-condition (lambda (c)
                           (typecase c

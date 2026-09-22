@@ -2,6 +2,7 @@
   (:use #:cl)
   (:local-nicknames (#:anansi #:com.thejach.anansi))
   (:export #:create-limiter
+           #:destroy-limiter
            #:verify-login
            #:generate-hash))
 
@@ -11,6 +12,10 @@
 
 (defun create-limiter ()
   (setf *limiter* (anansi:make-login-rate-limiter)))
+
+(defun destroy-limiter ()
+  (com.thejach.anansi:stop-login-rate-limiter-maintenance-thread *limiter*)
+  (setf *limiter* nil))
 
 (defun check-password-against-hash (password hash)
   (handler-case
